@@ -101,6 +101,42 @@ It skips the known write/store commands, but back up your patches first.
 - **Next patch, tap tempo, effects 4–6, state-aware toggles:** these need a small USB-host
   MIDI router that can read the pedal's replies.
 
+## References and prior work
+
+**Zoom MultiStomp MIDI/SysEx**
+- [g200kg/zoom-ms-utility](https://github.com/g200kg/zoom-ms-utility): the key reference for the
+  original MS-50G/60B/70CDR. See its [MIDI message doc](https://github.com/g200kg/zoom-ms-utility/blob/master/midimessage.md)
+  (patch format, parameter edit, "effective only for effect1-3") and the
+  [browser patch editor](https://g200kg.github.io/zoom-ms-utility/).
+- [HamiltonGerlach/MultiStompController](https://github.com/HamiltonGerlach/MultiStompController):
+  an Arduino foot controller for the MS-50G/70CDR using the same SysEx set.
+- [PhilDaThrill/MultistompMidi](https://github.com/PhilDaThrill/MultistompMidi): Python helpers for
+  MultiStomp MIDI (written for the MS-70CDR; model byte `0x61` → `0x58` for the MS-50G).
+- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer): in-depth protocol work for the
+  **MS Plus** series (a different protocol from the original MS-50G).
+- [RyoSogawa/zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander):
+  a web SysEx generator for MS Plus pedals and MIDI controllers like the Chocolate. It's what
+  started this project.
+
+**Discussions**
+- [r/zoommultistomp: Using M-Vave Chocolate to change between effects on the MS-50G](https://www.reddit.com/r/zoommultistomp/comments/1af8q6p/using_mvave_chocolate_to_change_between_effects/):
+  "MS-50G can only toggle the lower 3 effect slots directly by SysEx… the effect slot toggling is
+  done by sending the whole updated patch."
+- [r/zoommultistomp: A MIDI switcher for the first 3 effects](https://www.reddit.com/r/zoommultistomp/comments/a5hcw4/made_a_midiswitcher_for_the_first_3_effects_on_my/)
+- [r/zoommultistomp: MIDI SysEx for the MS Plus series](https://www.reddit.com/r/zoommultistomp/comments/1clsyfn/midi_sysex_for_ms_plus_series/)
+- [Connect GP-5 with Chocolate Plus via USB](https://rvalladares.com/gp5/gp5-usb-chocolateplus) and the
+  [Neural DSP forum thread](https://unity.neuraldsp.com/t/mvave-chocolate-plus-usb-host/16825): where
+  "host mode needs external 5 V" came from.
+
+**Manuals**
+- [Zoom MS-50G operation manual](https://zoomcorp.com/media/documents/MS-50G_operationManual_English.pdf)
+  (p.11: footswitch cycle list)
+- [Chocolate Plus manual](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate-Plus.pdf)
+  (U/H interface modes) and
+  [Chocolate Plus software instructions](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate%20Plus-Software%20instructions.pdf)
+  (CubeSuite modes, 200-byte SysEx limit)
+- [M-VAVE Chocolate Plus product page](http://www.cuvave.com/product?id=chocolate-plus)
+
 ## License
 
 MIT
