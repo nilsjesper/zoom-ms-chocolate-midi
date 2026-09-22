@@ -1,5 +1,12 @@
 # zoom-ms-chocolate-midi
 
+This is just some experimental code that I put together for myself to quickly build different configurations for the M-Vave Chocolate plus and help me figure out what kind of things I might be able to control. The cc 20-24 on the 2nd bank are actually for a totally seperate project and don't have any effect on the ms50g.
+
+This work draws on just a TON of pre-existing research across github reddit and other places on the messages the Zoom pedal accepts.
+
+
+---------
+
 Control an **original Zoom MS-50G MultiStomp** from an **M-VAVE Chocolate Plus** MIDI footswitch,
 with no computer in between: toggle effects, the tuner and CCs, and jump to patches.
 
