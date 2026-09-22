@@ -1,0 +1,8 @@
+# Local research files, patch backups, generated output
+local/
+*.fcp
+!fcp/template.fcp
+*-backup-*.txt
+__pycache__/
+.DS_Store
+.vscode/
