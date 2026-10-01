@@ -1,0 +1,79 @@
+# Footswitch layout for make_fcp.py. group = 1-8, switch = "A"-"D".
+# Unlisted switches keep CubeSuite's default (PC 0).
+#
+# Actions and their keys:
+#   cc_toggle      cc, label (optional)      alternates CC 127/0; first press after import sends 127
+#   effect_toggle  effect                    effect 1-3 on/off (the MS-50G ignores 4-6); first press turns it off
+#   program        patch, revert (optional)  jump to patch 1-50 as shown on the pedal; revert defaults to true
+#   revert_edits   (no keys)                 discard unsaved edits, stay on the current patch
+
+[[switch]]
+group = 1
+switch = "A"
+action = "cc_toggle"      # alternates 127/0; first press after import sends 127
+cc = 74
+label = "tuner on/off"    # optional
+
+[[switch]]
+group = 1
+switch = "B"
+action = "effect_toggle"  # effects 1-3 only on the MS-50G
+effect = 3
+
+[[switch]]
+group = 1
+switch = "C"
+action = "effect_toggle"
+effect = 2
+
+[[switch]]
+group = 1
+switch = "D"
+action = "effect_toggle"
+effect = 1
+
+[[switch]]
+group = 2
+switch = "A"
+action = "cc_toggle"
+cc = 20
+
+[[switch]]
+group = 2
+switch = "B"
+action = "cc_toggle"
+cc = 21
+
+[[switch]]
+group = 2
+switch = "C"
+action = "cc_toggle"
+cc = 22
+
+[[switch]]
+group = 2
+switch = "D"
+action = "cc_toggle"
+cc = 23
+
+# Jump to patch 12 as shown on the pedal. Editor-off is sent first so unsaved edits
+# are discarded instead of being saved into the patch being left.
+# [[switch]]
+# group = 3
+# switch = "A"
+# action = "program"
+# patch = 12
+
+# Plain Program Change to patch 13; pending edits get saved into the old patch.
+# [[switch]]
+# group = 3
+# switch = "B"
+# action = "program"
+# patch = 13
+# revert = false
+
+# Discard unsaved edits, stay on the current patch.
+# [[switch]]
+# group = 3
+# switch = "C"
+# action = "revert_edits"
