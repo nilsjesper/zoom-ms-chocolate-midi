@@ -14,7 +14,8 @@ It includes:
 - `make_fcp.py`, which generates a CubeSuite preset file (`.fcp`) from a simple layout table,
   so you don't have to type SysEx into CubeSuite by hand.
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md), with the MS-50G MIDI/SysEx details and the CubeSuite
-  `.fcp` format, as worked out by experiment.
+  `.fcp` format, as worked out by experiment, and [`docs/TESTPLAN.md`](docs/TESTPLAN.md) with
+  what has and hasn't been checked on the hardware.
 - `tools/`, two small macOS Swift utilities for talking to the pedal and watching MIDI traffic.
 
 Unofficial; not affiliated with Zoom or M-VAVE. Tested on one MS-50G (firmware 3.10) and one
@@ -30,7 +31,8 @@ Chocolate Plus. Use at your own risk.
 | Effect 1–3 on/off | ✅ | SysEx; each press alternates off/on |
 | Effect 4–6 on/off | ❌ | Firmware ignores the on/off message for slots 4–6 |
 | Tuner on/off | ✅ | CC 74 |
-| Jump to a patch | ✅ | Program Change |
+| Jump to a patch | ✅ | Program Change (editor-off is sent first; see below) |
+| Discard unsaved edits | ✅ | SysEx editor-off (`51`) reverts the pedal's edit buffer |
 | Next/previous patch | ❌ | No MIDI message for it; needs something that tracks state |
 | Tap tempo | ❌ | Tempo is inside each patch; no tap message |
 
@@ -58,17 +60,45 @@ The default layout:
 | 1 | Tuner on/off | Effect 3 on/off | Effect 2 on/off | Effect 1 on/off |
 | 2 | CC 20 (127/0) | CC 21 | CC 22 | CC 23 |
 
-Groups are switched on the Chocolate with E (A+B) and F (C+D). To change the layout, edit `LAYOUT`
-in `make_fcp.py`:
+Groups are switched on the Chocolate with E (A+B) and F (C+D). To change the layout, edit
+`layout.toml` (or pass another file with `-l`). One `[[switch]]` table per footswitch; unlisted
+switches keep CubeSuite's default (PC 0):
 
-```python
-LAYOUT = {
-    (1, "A"): cc_toggle(TUNER_CC, "tuner on/off"),
-    (1, "D"): effect_toggle(1),      # effect 1 on/off (effects 1-3 only)
-    (2, "A"): cc_toggle(20),         # CC 20, alternating 127 / 0
-    (3, "A"): program(12),           # jump to patch 12 as shown on the pedal
-}
+```toml
+[[switch]]
+group = 1
+switch = "A"
+action = "cc_toggle"      # CC 74, alternating 127 / 0
+cc = 74
+label = "tuner on/off"    # optional
+
+[[switch]]
+group = 1
+switch = "D"
+action = "effect_toggle"  # effect 1 on/off (effects 1-3 only)
+effect = 1
+
+[[switch]]
+group = 3
+switch = "A"
+action = "program"        # jump to patch 12 as shown on the pedal (discards unsaved edits first)
+patch = 12
+
+[[switch]]
+group = 3
+switch = "B"
+action = "program"        # plain Program Change; pending edits get saved into the old patch
+patch = 13
+revert = false
+
+[[switch]]
+group = 3
+switch = "C"
+action = "revert_edits"   # discard unsaved edits, stay on the current patch
 ```
+
+A switch can send several messages per press, in order, with at most one SysEx message among
+them: a `program` switch sends editor-off and then the Program Change.
 
 ### Things to know
 
@@ -78,6 +108,13 @@ LAYOUT = {
   step on the pedal itself, a switch can do the opposite of what you expect; press it again.
 - **Editor mode:** a freshly powered-on MS-50G ignores effect on/off messages until it gets
   `F0 52 00 58 50 F7`. Each effect switch sends that first automatically.
+- **A Program Change saves pending edits.** Verified on this pedal: a Program Change received
+  over MIDI stores any unsaved edits into the patch being left, whether it re-selects the same
+  patch or jumps to another one. An effect you toggled off with the Chocolate becomes part of
+  that patch. A `program` switch therefore sends editor-off (`F0 52 00 58 51 F7`) first, which
+  discards the edit buffer (also verified); set `revert = false` to keep the plain Program
+  Change. The zoom-explorer source adds that auto-save off makes no difference and that edits
+  made on the pedal itself count too.
 
 ## Tools (macOS)
 
@@ -87,10 +124,13 @@ Both need the device connected to the Mac over USB.
 swift tools/zoomio.swift backup patches.txt   # save all 50 patches (SysEx) to a file
 swift tools/zoomio.swift read                 # current patch, settings block, raw patch data
 swift tools/midimon.swift 120                 # watch MIDI from the Chocolate (SINCO) / pedal for 120 s
+swift tools/zoomio.swift send F0 52 00 58 29 F7   # send one raw message, print the reply
+swift tools/zoomio.swift edits                # re-run the "PC saves edits / 51 reverts" test (restores the patch)
 ```
 
 `zoomio.swift probe` sends unknown single-byte SysEx commands to the pedal to see what replies.
-It skips the known write/store commands, but back up your patches first.
+It skips the known write/store commands, but back up your patches first. `backup`, `read` and
+`probe` finish with editor-off, which also discards unsaved edits on the pedal; `send` doesn't.
 
 ## Ideas not built yet
 
@@ -99,7 +139,11 @@ It skips the known write/store commands, but back up your patches first.
 - **Set list on a switch:** a Chocolate SysEx field could hold a whole settings write (`2A`,
   34 bytes) to load a prepared cycle list in one tap. Writing `2A` hasn't been tested.
 - **Next patch, tap tempo, effects 4–6, state-aware toggles:** these need a small USB-host
-  MIDI router that can read the pedal's replies.
+  MIDI router that can read the pedal's replies. The zoom-explorer source shows the raw material
+  is there: in editor mode the pedal reports every on/off and knob edit made on the pedal as a
+  `31` SysEx, it doesn't announce patch changes made with its own footswitch (zoom-explorer polls
+  `33` every 500 ms), and effects 4–6 are toggled by writing the whole patch back. Its
+  `src/ZoomDevice.ts` is a working reference implementation of all of that.
 
 ## References and prior work
 
@@ -112,8 +156,13 @@ It skips the known write/store commands, but back up your patches first.
   an Arduino foot controller for the MS-50G/70CDR using the same SysEx set.
 - [PhilDaThrill/MultistompMidi](https://github.com/PhilDaThrill/MultistompMidi): Python helpers for
   MultiStomp MIDI (written for the MS-70CDR; model byte `0x61` → `0x58` for the MS-50G).
-- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer): in-depth protocol work for the
-  **MS Plus** series (a different protocol from the original MS-50G).
+- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer) and its patch manager
+  [sym.bios.is](https://sym.bios.is): the README documents the **MS Plus** protocol, but the app
+  and source (`src/ZoomDevice.ts`, `src/ZoomPatch.ts`) also drive the original MS-50G/60B/70CDR
+  (confirmed on this MS-50G). Worth knowing: a browser-based MIDI CC mapper for effect
+  parameters (CC 2–14 = effect 1, 17–29 = effect 2, 33–45, 48–60, 63–75, 78–90 = effects 3–6,
+  first CC of each block = on/off), and `public/zoom-effect-mappings-msog.json` with names,
+  parameter names and ranges for 173 MS-50G effects.
 - [RyoSogawa/zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander):
   a web SysEx generator for MS Plus pedals and MIDI controllers like the Chocolate. It's what
   started this project.
