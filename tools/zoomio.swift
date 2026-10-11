@@ -30,6 +30,23 @@ func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02X", $0) }.joined(s
 let Z: [UInt8] = [0xF0, 0x52, 0x00, 0x58]
 func prog() -> Int { let r = xfer(Z + [0x33, 0xF7], 0.3); if let i = r.firstIndex(of: 0xC0), i + 1 < r.count { return Int(r[i+1]) }; return -1 }
 func patch() -> [UInt8] { xfer(Z + [0x29, 0xF7], 0.8) }
+// Program Change channel and numbering. Stock: channel 1, PC 0 = patch 1. MIDISTOMP firmware
+// can filter to one MIDI CHANNEL and start at PC 1 (PROG CH START NO. 1); findPC() finds out.
+var pcCh: UInt8 = 0, pcOff = 0
+func pc(_ n: Int) { send([0xC0 | pcCh, UInt8(n + pcOff)]); wait(0.4) }  // n = 0-based patch index
+func findPC() -> Bool {
+  let start = prog()
+  for ch in UInt8(0)..<16 {
+    send([0xC0 | ch, 1]); wait(0.4); let p1 = prog()
+    send([0xC0 | ch, 2]); wait(0.4); let p2 = prog()
+    if p1 >= 0 && p2 == p1 + 1 {
+      pcCh = ch; pcOff = 1 - p1; pc(start)
+      print("program change: channel \(ch + 1), PC \(pcOff) = patch 1")
+      return true
+    }
+  }
+  return false
+}
 
 let mode = CommandLine.arguments.dropFirst().first ?? ""
 if dst == 0 { print("ZOOM MS Series not connected"); exit(1) }
@@ -37,10 +54,11 @@ if prog() < 0 { send(Z + [0x50, 0xF7]); wait(0.3); if prog() < 0 { print("pedal 
 if mode == "backup" {
   send(Z + [0x50, 0xF7]); wait(0.3)
   let start = prog(); print("current program:", start)
+  if !findPC() { print("pedal ignores Program Change on every channel (PROG CH RECEIVE off?)"); exit(1) }
   var out = ""
-  for n in 0..<50 { send([0xC0, UInt8(n)]); wait(0.4); let p = patch(); out += "\(n) \(hex(p))\n"; print(n, p.count, "bytes", String(bytes: p.count > 141 ? Array(p[132..<145]).filter { $0 >= 0x20 && $0 < 0x7F } : [], encoding: .ascii) ?? "") }
+  for n in 0..<50 { pc(n); if prog() != n { print("patch \(n + 1) did not load"); exit(1) }; let p = patch(); out += "\(n) \(hex(p))\n"; print(n, p.count, "bytes", String(bytes: p.count > 141 ? Array(p[132..<145]).filter { $0 >= 0x20 && $0 < 0x7F } : [], encoding: .ascii) ?? "") }
   try! out.write(toFile: CommandLine.arguments[2], atomically: true, encoding: .utf8)
-  send([0xC0, UInt8(start)]); wait(0.4); print("restored program:", prog())
+  pc(start); print("restored program:", prog())
   send(Z + [0x51, 0xF7]); wait(0.2)
 } else if mode == "read" {
   send(Z + [0x50, 0xF7]); wait(0.3)
@@ -52,6 +70,7 @@ if mode == "backup" {
   let skip: Set<UInt8> = [0x28, 0x29, 0x31, 0x32, 0x33, 0x50, 0x51]
   send(Z + [0x50, 0xF7]); wait(0.3)
   let start = prog(); let base = patch(); print("start program:", start, "patch bytes:", base.count)
+  if !findPC() { print("pedal ignores Program Change on every channel (PROG CH RECEIVE off?)"); exit(1) }
   for c in UInt8(0)..<0x80 where !skip.contains(c) {
     let r = xfer(Z + [c, 0xF7], 0.35)
     let p = prog(); let pd = patch()
@@ -61,7 +80,7 @@ if mode == "backup" {
     if pd != base && pd.count == base.count { note += " PATCH CHANGED (\(zip(pd, base).filter { $0 != $1 }.count) bytes)" }
     if pd.count != base.count { note += " patch read \(pd.count) bytes" }
     if !note.isEmpty { print(String(format: "cmd %02X:", c) + note) }
-    if p != start && p >= 0 { send([0xC0, UInt8(start)]); wait(0.4) }
+    if p != start && p >= 0 { pc(start) }
   }
   print("end program:", prog())
   send(Z + [0x51, 0xF7]); wait(0.2)

@@ -1,141 +1,128 @@
 # zoom-ms-chocolate-midi
 
-This is just some experimental code that I put together for myself to quickly build different configurations for the M-Vave Chocolate plus and help me figure out what kind of things I might be able to control. The cc 20-24 on the 2nd bank are actually for a totally seperate project and don't have any effect on the ms50g.
+Control an original Zoom MS-50G MultiStomp from an M-VAVE Chocolate Plus footswitch, with no
+computer in between. `make_fcp.py` writes a CubeSuite preset (`.fcp`) that toggles effects and the
+tuner and jumps to patches.
 
-This work draws on just a TON of pre-existing research across github reddit and other places on the messages the Zoom pedal accepts.
+It works with Zoom's stock 3.10 firmware. With [MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp)
+firmware it can also switch effects 4-6 and move knobs over MIDI CC.
 
+Tested on one MS-50G and one Chocolate Plus with stock firmware. On MIDISTOMP v1.0 the preset's
+messages were checked on the pedal from a Mac, but not yet sent through the Chocolate. Unofficial
+and not affiliated with Zoom, M-VAVE or MIDISTOMP. Use at your own risk.
 
----------
+The MS-50G+ and other MS Plus pedals use a different protocol; see
+[zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander) for those.
 
-Control an **original Zoom MS-50G MultiStomp** from an **M-VAVE Chocolate Plus** MIDI footswitch,
-with no computer in between: toggle effects, the tuner and CCs, and jump to patches.
+## Features
 
-It includes:
-- `make_fcp.py`, which generates a CubeSuite preset file (`.fcp`) from a simple layout table,
-  so you don't have to type SysEx into CubeSuite by hand.
-- [`docs/PROTOCOL.md`](docs/PROTOCOL.md), with the MS-50G MIDI/SysEx details and the CubeSuite
-  `.fcp` format, as worked out by experiment.
-- `tools/`, two small macOS Swift utilities for talking to the pedal and watching MIDI traffic.
-
-Unofficial; not affiliated with Zoom or M-VAVE. Tested on one MS-50G (firmware 3.10) and one
-Chocolate Plus. Use at your own risk.
-
-> **Original MS-50G only.** The MS-50G+ and other MS Plus pedals use a different protocol.
-> For those, see [zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander).
-
-## What works
-
-| | Chocolate alone | Notes |
+| | Stock 3.10 | MIDISTOMP |
 |---|---|---|
-| Effect 1–3 on/off | ✅ | SysEx; each press alternates off/on |
-| Effect 4–6 on/off | ❌ | Firmware ignores the on/off message for slots 4–6 |
-| Tuner on/off | ✅ | CC 74 |
-| Jump to a patch | ✅ | Program Change |
-| Next/previous patch | ❌ | No MIDI message for it; needs something that tracks state |
-| Tap tempo | ❌ | Tempo is inside each patch; no tap message |
+| Effect 1-3 on/off | yes (SysEx) | yes (CC 14, 24, 34) |
+| Effect 4-6 on/off | no | yes (CC 44, 54, 64) |
+| Effect knobs | effects 1-3 (SysEx) | yes (CC 15-73) |
+| Tuner on/off | yes (CC 74) | yes (CC 74) |
+| Jump to a patch | yes (Program Change) | yes (Program Change) |
+| Next/previous patch | no | no ([MIDISTOMP #34](https://github.com/matujuice/zoom-ms-midistomp/issues/34)) |
+| Tap tempo | no | no |
+
+Knobs aren't in the default layout. The full MIDI chart is in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Hardware setup
 
-1. Set the Chocolate Plus switch to **H** (host).
-2. Plug **external 5 V into the Chocolate's USB-C** port. Host mode doesn't work on battery.
-3. Connect the Chocolate's **USB-A host port** to the MS-50G's USB port with a data cable.
-4. Power the MS-50G separately (adapter or batteries).
+1. Set the Chocolate's switch to **H** (host).
+2. Plug external 5 V into the Chocolate's USB-C port. Host mode doesn't work on battery.
+3. Connect the Chocolate's USB-A port to the MS-50G's USB port with a data cable.
+4. Power the MS-50G separately.
 
-To program the Chocolate, switch it to **U** and connect its USB-C to your computer running CubeSuite.
+To program the Chocolate, set the switch to **U** and connect its USB-C to a computer running CubeSuite.
 
 ## Usage
 
 ```sh
-python3 make_fcp.py        # writes chocolate.fcp
+python3 make_fcp.py                     # MIDISTOMP, MIDI channel 1 -> chocolate.fcp
+python3 make_fcp.py --channel 2         # pedal's MIDI CHANNEL is 2
+python3 make_fcp.py --pc-start 1        # pedal's PROG CH START NO. is 1
+python3 make_fcp.py --firmware stock    # stock firmware
 ```
 
-Then in CubeSuite (Chocolate in U mode): **Import** → `chocolate.fcp`. Switch back to H and connect the pedal.
+On MIDISTOMP, match `--channel` and `--pc-start` to the pedal's MIDI menu (press the left knob,
+then MIDI). Any channel works when MIDI CHANNEL is OMNI. A wrong `--pc-start` makes every patch
+switch land one patch off.
 
-The default layout:
+In CubeSuite, with the Chocolate on U, import `chocolate.fcp`. Then switch back to H and connect the pedal.
+
+Default layout:
 
 | Group | A | B | C | D |
 |---|---|---|---|---|
-| 1 | Tuner on/off | Effect 3 on/off | Effect 2 on/off | Effect 1 on/off |
-| 2 | CC 20 (127/0) | CC 21 | CC 22 | CC 23 |
+| 1 | Tuner | Effect 3 | Effect 2 | Effect 1 |
+| 2 (MIDISTOMP) | Patch 1 | Effect 6 | Effect 5 | Effect 4 |
 
-Groups are switched on the Chocolate with E (A+B) and F (C+D). To change the layout, edit `LAYOUT`
-in `make_fcp.py`:
+Switch groups on the Chocolate with E (A+B) and F (C+D). Change the layout in `layout()` in
+`make_fcp.py`:
 
 ```python
-LAYOUT = {
-    (1, "A"): cc_toggle(TUNER_CC, "tuner on/off"),
-    (1, "D"): effect_toggle(1),      # effect 1 on/off (effects 1-3 only)
-    (2, "A"): cc_toggle(20),         # CC 20, alternating 127 / 0
-    (3, "A"): program(12),           # jump to patch 12 as shown on the pedal
-}
+(1, "D"): effect_toggle(1),            # effect 1 on/off
+(3, "A"): program(12),                 # patch 12 as numbered on the pedal
+(3, "B"): cc_toggle(20, channel=1),    # CC 20 on channel 1 for other gear, 127 / 0
 ```
 
-### Things to know
+MIDISTOMP uses CC 14-73 for effects and knobs, so a CC meant for other gear on the same Chocolate
+can move a knob. To avoid that, set the pedal's MIDI CHANNEL to 2, build with `--channel 2`, and
+send the other gear's CCs on channel 1.
 
-- **The first press after importing sends the "B" half** of a two-state switch. The generator sets
-  things up so the first press turns an effect *off* and turns the tuner *on*.
-- **Toggles are blind.** The Chocolate doesn't know the pedal's state. If you change patches or
-  step on the pedal itself, a switch can do the opposite of what you expect; press it again.
-- **Editor mode:** a freshly powered-on MS-50G ignores effect on/off messages until it gets
-  `F0 52 00 58 50 F7`. Each effect switch sends that first automatically.
+### Notes
+
+- After an import, the first press of a toggle turns the effect off, or the tuner on.
+- Toggles don't know the pedal's state. After a patch change or a press on the pedal itself, a
+  switch can do the opposite of what you expect; press it again.
+- With AUTO SAVE on, toggled effects are saved into the patch when you leave it.
+- Stock firmware ignores SysEx effect on/off until it gets editor mode (`F0 52 00 58 50 F7`), so
+  each stock effect switch sends that first.
 
 ## Tools (macOS)
 
-Both need the device connected to the Mac over USB.
-
 ```sh
-swift tools/zoomio.swift backup patches.txt   # save all 50 patches (SysEx) to a file
-swift tools/zoomio.swift read                 # current patch, settings block, raw patch data
-swift tools/midimon.swift 120                 # watch MIDI from the Chocolate (SINCO) / pedal for 120 s
+swift tools/zoomio.swift backup patches.txt   # save all 50 patches to a file
+swift tools/zoomio.swift read                 # current program, settings block, current patch
+swift tools/zoomio.swift probe                # send unknown SysEx commands, report replies
+swift tools/midimon.swift 120                 # print MIDI from the Chocolate and pedal for 120 s
 ```
 
-`zoomio.swift probe` sends unknown single-byte SysEx commands to the pedal to see what replies.
-It skips the known write/store commands, but back up your patches first.
+`backup` and `probe` find the pedal's Program Change channel and numbering on their own. `probe`
+skips known write commands, but back up your patches before running it.
 
-## Ideas not built yet
+## Ideas
 
-- **Cycle list → Chocolate groups:** read the pedal's footswitch cycle list (decoded; see
-  PROTOCOL.md) and lay those patches out as `program(n)` switches across groups 3–8.
-- **Set list on a switch:** a Chocolate SysEx field could hold a whole settings write (`2A`,
-  34 bytes) to load a prepared cycle list in one tap. Writing `2A` hasn't been tested.
-- **Next patch, tap tempo, effects 4–6, state-aware toggles:** these need a small USB-host
-  MIDI router that can read the pedal's replies.
+- Read the pedal's footswitch cycle list (decoded in PROTOCOL.md) and lay those patches out as
+  `program(n)` switches in groups 3-8.
+- Put a settings write (`2A`, 34 bytes) in a SysEx field to load a prepared cycle list in one
+  press. Writing `2A` is untested.
+- With MIDISTOMP, sweep a knob CC from the Chocolate's expression input. Untried.
 
-## References and prior work
+## References
 
-**Zoom MultiStomp MIDI/SysEx**
-- [g200kg/zoom-ms-utility](https://github.com/g200kg/zoom-ms-utility): the key reference for the
-  original MS-50G/60B/70CDR. See its [MIDI message doc](https://github.com/g200kg/zoom-ms-utility/blob/master/midimessage.md)
-  (patch format, parameter edit, "effective only for effect1-3") and the
-  [browser patch editor](https://g200kg.github.io/zoom-ms-utility/).
+- [matujuice/zoom-ms-midistomp](https://github.com/matujuice/zoom-ms-midistomp): MIDISTOMP
+  firmware. Its Mac updater was tested with this repo's tools.
+- [g200kg/zoom-ms-utility](https://github.com/g200kg/zoom-ms-utility): MS-50G/60B/70CDR patch
+  format and [MIDI messages](https://github.com/g200kg/zoom-ms-utility/blob/master/midimessage.md).
 - [HamiltonGerlach/MultiStompController](https://github.com/HamiltonGerlach/MultiStompController):
-  an Arduino foot controller for the MS-50G/70CDR using the same SysEx set.
-- [PhilDaThrill/MultistompMidi](https://github.com/PhilDaThrill/MultistompMidi): Python helpers for
-  MultiStomp MIDI (written for the MS-70CDR; model byte `0x61` → `0x58` for the MS-50G).
-- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer): in-depth protocol work for the
-  **MS Plus** series (a different protocol from the original MS-50G).
+  Arduino foot controller using the same SysEx.
+- [PhilDaThrill/MultistompMidi](https://github.com/PhilDaThrill/MultistompMidi): Python MultiStomp
+  helpers (MS-70CDR; model byte `0x61`, `0x58` for the MS-50G).
+- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer): MS Plus protocol work.
 - [RyoSogawa/zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander):
-  a web SysEx generator for MS Plus pedals and MIDI controllers like the Chocolate. It's what
-  started this project.
-
-**Discussions**
-- [r/zoommultistomp: Using M-Vave Chocolate to change between effects on the MS-50G](https://www.reddit.com/r/zoommultistomp/comments/1af8q6p/using_mvave_chocolate_to_change_between_effects/):
-  "MS-50G can only toggle the lower 3 effect slots directly by SysEx… the effect slot toggling is
-  done by sending the whole updated patch."
-- [r/zoommultistomp: A MIDI switcher for the first 3 effects](https://www.reddit.com/r/zoommultistomp/comments/a5hcw4/made_a_midiswitcher_for_the_first_3_effects_on_my/)
-- [r/zoommultistomp: MIDI SysEx for the MS Plus series](https://www.reddit.com/r/zoommultistomp/comments/1clsyfn/midi_sysex_for_ms_plus_series/)
-- [Connect GP-5 with Chocolate Plus via USB](https://rvalladares.com/gp5/gp5-usb-chocolateplus) and the
-  [Neural DSP forum thread](https://unity.neuraldsp.com/t/mvave-chocolate-plus-usb-host/16825): where
-  "host mode needs external 5 V" came from.
-
-**Manuals**
-- [Zoom MS-50G operation manual](https://zoomcorp.com/media/documents/MS-50G_operationManual_English.pdf)
-  (p.11: footswitch cycle list)
-- [Chocolate Plus manual](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate-Plus.pdf)
-  (U/H interface modes) and
-  [Chocolate Plus software instructions](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate%20Plus-Software%20instructions.pdf)
-  (CubeSuite modes, 200-byte SysEx limit)
-- [M-VAVE Chocolate Plus product page](http://www.cuvave.com/product?id=chocolate-plus)
+  SysEx generator for MS Plus pedals; it started this project.
+- Reddit: [Chocolate and MS-50G](https://www.reddit.com/r/zoommultistomp/comments/1af8q6p/using_mvave_chocolate_to_change_between_effects/),
+  [switcher for effects 1-3](https://www.reddit.com/r/zoommultistomp/comments/a5hcw4/made_a_midiswitcher_for_the_first_3_effects_on_my/),
+  [MS Plus SysEx](https://www.reddit.com/r/zoommultistomp/comments/1clsyfn/midi_sysex_for_ms_plus_series/).
+- Chocolate host mode needs 5 V: [GP-5 guide](https://rvalladares.com/gp5/gp5-usb-chocolateplus),
+  [Neural DSP thread](https://unity.neuraldsp.com/t/mvave-chocolate-plus-usb-host/16825).
+- Manuals: [MS-50G](https://zoomcorp.com/media/documents/MS-50G_operationManual_English.pdf)
+  (p.11, cycle list), [Chocolate Plus](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate-Plus.pdf),
+  [CubeSuite](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate%20Plus-Software%20instructions.pdf)
+  (200-byte SysEx limit), [product page](http://www.cuvave.com/product?id=chocolate-plus).
 
 ## License
 

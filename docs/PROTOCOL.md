@@ -57,6 +57,39 @@ Decoding (verified against a 9-entry list):
 One more bit (raw byte 31) changes when an entry is added or removed; probably a count or end
 marker. Writing `2A` back is untested.
 
+## MS-50G with MIDISTOMP firmware
+
+[MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp) v1.0 is a patched MS-50G 3.10 OS. It
+reports the same identity (model `58`, firmware `3.10`), and all the SysEx above works unchanged,
+including `31` ignoring effects 4–6. Verified on one MS-50G, from a Mac over USB:
+
+| Message | Bytes | Notes |
+|---|---|---|
+| Effect n on/off | `B0 cc vv` | `cc` = 10n+4 (14, 24, 34, 44, 54, 64); `vv` 0–63 off, 64–127 on. All six effects, no editor mode needed. |
+| Effect n, knob k | `B0 cc vv` | `cc` = 10n+4+k (k = 1–9, so CC 15–73); `vv` 0–127 spans the knob's whole range. A knob the effect lacks does nothing. |
+| Tuner | `B0 4A vv` | CC 74, as stock. |
+| Program Change | `C0 pp` | PROG CH START NO. 0: `pp` 0–49 = patch 1–50 (stock numbering). START NO. 1: `pp` 1–50 = patch 1–50, PC 0 ignored. |
+| MIDI clock | `F8` | 24 per beat; sets the patch tempo after about 2 beats, held to 40–250 BPM. |
+| Start / Stop | `FA` / `FC` | For MIDISTOMP's custom effects; no visible change on stock effects. |
+
+Other CCs (e.g. CC 7) do nothing. The MIDI menu (left knob → MIDI) can turn each message type off
+and set MIDI CHANNEL (OMNI or 1–16). With a channel set, CC and PC on other channels are ignored.
+Clock, Start and Stop have no channel.
+
+**Replies stay on channel 1.** The current-program reply to `33` is `B0 00 00 B0 20 00 C0 pp` on
+channel 1 whatever MIDI CHANNEL is set to. It only came back after editor mode on (`50`).
+
+**Patch tempo** (patch bytes counted from `F0` = 0): byte 125 is the 7-bit group's MSB byte, and
+tempo = `(b[131] << 3) | (b130 >> 5)`, where b130 = `b[130]`, plus 128 if bit 2 of byte 125 is set.
+Checked against clock at 73, 100, 160 and 250 BPM and stored tempos from 42 to 250.
+
+**AUTO SAVE** (pedal SETTINGS): when it's on, edits made over MIDI (CC toggles, knob CCs, clock
+tempo) are saved into the patch when the pedal leaves it. To undo a test, write the original patch
+back (`28`) and store it (`32`); that restored a patch byte for byte.
+
+**TEMPO LOCK** (MIDISTOMP setting): per MIDISTOMP's source, bit 5 of byte 23 of the unpacked
+settings block (`2B` → `2A`). It read 0 with TEMPO LOCK off; reading it while on is untested.
+
 ## M-VAVE Chocolate Plus
 
 - Shows up over USB MIDI as **`SINCO`**. No reply to the universal identity request.

@@ -3,7 +3,9 @@
 original Zoom MS-50G through the Chocolate's USB host port.
 
 Usage:
-  python3 make_fcp.py                     # writes chocolate.fcp from fcp/template.fcp
+  python3 make_fcp.py                     # MIDISTOMP firmware, MIDI channel 1, writes chocolate.fcp
+  python3 make_fcp.py --channel 2         # match the pedal's MIDI CHANNEL setting (MIDISTOMP)
+  python3 make_fcp.py --firmware stock    # Zoom's stock 3.10 firmware (effects 1-3 only)
   python3 make_fcp.py -o my.fcp           # custom output path
 
 Then import the file in CubeSuite ("Import", with the Chocolate connected in U mode).
@@ -29,6 +31,11 @@ SWITCHES = "ABCD"
 EDITOR_ON = bytes([0xF0, 0x52, 0x00, 0x58, 0x50, 0xF7])  # required once after power-up before 0x31 works
 TUNER_CC = 74
 
+# Set from the command line in main(); see --firmware, --channel and --pc-start.
+FIRMWARE = "midistomp"     # "midistomp" or "stock"
+CHANNEL = 1                # MIDI channel (1-16) for PC and CC sent to the pedal
+PC_START = 0               # MIDISTOMP's PROG CH START NO. setting; stock is always 0
+
 
 def effect_sysex(slot: int, on: bool) -> bytes:
     """slot 0-2 = effects 1-3; the MS-50G firmware ignores this message for effects 4-6.
@@ -38,36 +45,57 @@ def effect_sysex(slot: int, on: bool) -> bytes:
 
 
 # --- Footswitch behaviors -------------------------------------------------------
-# A bank is ("sysex", bytes), ("cc", number, value) or ("pc", program). MIDI channel 1.
+# A bank is ("sysex", bytes), ("cc", number, value[, channel]) or ("pc", program[, channel]).
+# Without a channel, PC and CC go out on CHANNEL.
 
 def effect_toggle(effect: int) -> dict:
-    """effect = 1-3 as shown on the pedal. First press turns it off."""
+    """effect = 1-6 as shown on the pedal (1-3 on stock firmware). First press turns it off.
+    MIDISTOMP: CC 10n+4 (14, 24 ... 64), 127 = on, 0 = off. Stock: SysEx 0x31."""
+    if FIRMWARE == "midistomp":
+        assert 1 <= effect <= 6, "effects are 1-6"
+        number = 10 * effect + 4
+        return {"a": ("cc", number, 127), "b": ("cc", number, 0),
+                "label": f"effect {effect} on/off (CC {number})"}
     slot = effect - 1
     return {"a": ("sysex", effect_sysex(slot, True)), "b": ("sysex", effect_sysex(slot, False)),
             "label": f"effect {effect} on/off"}
 
 
-def cc_toggle(number: int, label: str = "") -> dict:
-    """Alternates CC value 127 / 0. First press sends 127."""
-    return {"a": ("cc", number, 0), "b": ("cc", number, 127), "label": label or f"CC {number} 127/0"}
+def cc_toggle(number: int, label: str = "", channel: int | None = None) -> dict:
+    """Alternates CC value 127 / 0. First press sends 127. On MIDISTOMP, CC 14-73 move
+    effects and knobs (see docs/PROTOCOL.md), so pick another number or channel for other gear."""
+    return {"a": ("cc", number, 0, channel), "b": ("cc", number, 127, channel),
+            "label": label or f"CC {number} 127/0" + (f" ch {channel}" if channel else "")}
 
 
 def program(patch: int) -> dict:
-    """patch = number shown on the pedal (1-50); sent as Program Change patch-1."""
-    return {"single": ("pc", patch - 1), "label": f"patch {patch:02d} (PC {patch - 1})"}
+    """patch = number shown on the pedal (1-50). Sent as PC patch-1, or PC patch when
+    MIDISTOMP's PROG CH START NO. is 1 (--pc-start 1)."""
+    pc = patch - 1 + PC_START
+    return {"single": ("pc", pc), "label": f"patch {patch:02d} (PC {pc})"}
 
 
-# (group 1-8, switch letter) -> behavior. Unlisted switches keep CubeSuite's default (PC 0).
-LAYOUT = {
-    (1, "A"): cc_toggle(TUNER_CC, "tuner on/off"),
-    (1, "B"): effect_toggle(3),
-    (1, "C"): effect_toggle(2),
-    (1, "D"): effect_toggle(1),
-    (2, "A"): cc_toggle(20),
-    (2, "B"): cc_toggle(21),
-    (2, "C"): cc_toggle(22),
-    (2, "D"): cc_toggle(23),
-}
+def layout() -> dict:
+    """(group 1-8, switch letter) -> behavior. Unlisted switches keep CubeSuite's default
+    (PC 0, which loads patch 1), so give every switch you'll press a behavior."""
+    groups = {
+        (1, "A"): cc_toggle(TUNER_CC, "tuner on/off"),
+        (1, "B"): effect_toggle(3),
+        (1, "C"): effect_toggle(2),
+        (1, "D"): effect_toggle(1),
+    }
+    if FIRMWARE == "midistomp":
+        groups |= {
+            (2, "A"): program(1),          # there is no tap-tempo MIDI message, so a patch jump
+            (2, "B"): effect_toggle(6),
+            (2, "C"): effect_toggle(5),
+            (2, "D"): effect_toggle(4),
+        }
+    # Other gear on the same USB host port: send it CCs on a channel the pedal ignores
+    # (set the pedal's MIDI CHANNEL to something else), e.g.
+    #   (3, "A"): cc_toggle(20, channel=1),
+    return groups
+
 
 
 def write_bank(buf: bytearray, base: int, list_off: int, data_off: int, bank: tuple) -> None:
@@ -79,9 +107,11 @@ def write_bank(buf: bytearray, base: int, list_off: int, data_off: int, bank: tu
         buf[base + data_off] = len(msg)
         buf[base + data_off + 1:base + data_off + 1 + len(msg)] = msg
     elif kind == "pc":
-        entry = [0x01, 0x00, TYPE_PC, bank[1], 0x00]
+        channel = bank[2] if len(bank) > 2 and bank[2] else CHANNEL
+        entry = [0x01, channel - 1, TYPE_PC, bank[1], 0x00]
     elif kind == "cc":
-        entry = [0x01, 0x00, TYPE_CC, bank[1], bank[2]]
+        channel = bank[3] if len(bank) > 3 and bank[3] else CHANNEL
+        entry = [0x01, channel - 1, TYPE_CC, bank[1], bank[2]]
     else:
         raise ValueError(bank)
     buf[base + list_off:base + list_off + ENTRY_LEN] = bytes(entry)
@@ -105,11 +135,21 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-t", "--template", default="fcp/template.fcp")
     ap.add_argument("-o", "--output", default="chocolate.fcp")
+    ap.add_argument("--firmware", choices=["midistomp", "stock"], default="midistomp",
+                    help="pedal firmware (default midistomp)")
+    ap.add_argument("--channel", type=int, choices=range(1, 17), default=1, metavar="1-16",
+                    help="MIDI channel for PC/CC; match MIDISTOMP's MIDI CHANNEL (OMNI: any)")
+    ap.add_argument("--pc-start", type=int, choices=[0, 1], default=0,
+                    help="MIDISTOMP's PROG CH START NO. setting (stock firmware: 0)")
     args = ap.parse_args()
+    global FIRMWARE, CHANNEL, PC_START
+    FIRMWARE, CHANNEL, PC_START = args.firmware, args.channel, args.pc_start
+    if FIRMWARE == "stock" and PC_START:
+        ap.error("--pc-start 1 needs MIDISTOMP firmware")
 
     buf = bytearray(open(args.template, "rb").read())
     assert len(buf) == 23646, f"unexpected template size {len(buf)}"
-    for (group, switch), behavior in sorted(LAYOUT.items()):
+    for (group, switch), behavior in sorted(layout().items()):
         write_record(buf, group, switch, behavior)
     open(args.output, "wb").write(buf)
     print(f"wrote {args.output}")
