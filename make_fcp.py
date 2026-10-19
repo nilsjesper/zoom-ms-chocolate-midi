@@ -75,6 +75,15 @@ def program(patch: int) -> dict:
     return {"single": ("pc", pc), "label": f"patch {patch:02d} (PC {pc})"}
 
 
+def patch_step(step: int) -> dict:
+    """MIDISTOMP v1.1 and later: step = 1 loads the next patch (CC 81), -1 the previous one
+    (CC 80), wrapping between patch 50 and patch 1. Every press sends 127."""
+    assert FIRMWARE == "midistomp", "next/previous patch needs MIDISTOMP"
+    assert step in (1, -1)
+    number = 81 if step > 0 else 80
+    return {"single": ("cc", number, 127), "label": f"{'next' if step > 0 else 'previous'} patch (CC {number})"}
+
+
 def layout() -> dict:
     """(group 1-8, switch letter) -> behavior. Unlisted switches keep CubeSuite's default
     (PC 0, which loads patch 1), so give every switch you'll press a behavior."""
@@ -91,6 +100,9 @@ def layout() -> dict:
             (2, "C"): effect_toggle(5),
             (2, "D"): effect_toggle(4),
         }
+    # Next/previous patch (MIDISTOMP v1.1+), e.g.
+    #   (3, "A"): patch_step(-1),
+    #   (3, "B"): patch_step(1),
     # Other gear on the same USB host port: send it CCs on a channel the pedal ignores
     # (set the pedal's MIDI CHANNEL to something else), e.g.
     #   (3, "A"): cc_toggle(20, channel=1),
