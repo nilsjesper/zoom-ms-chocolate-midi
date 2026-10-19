@@ -79,7 +79,7 @@ def patch_step(step: int) -> dict:
     """MIDISTOMP v1.1 and later: step = 1 loads the next patch (CC 81), -1 the previous one
     (CC 80), wrapping between patch 50 and patch 1. Every press sends 127."""
     assert FIRMWARE == "midistomp", "next/previous patch needs MIDISTOMP"
-    assert step in (1, -1)
+    assert step in (1, -1), "patch_step takes 1 (next) or -1 (previous)"
     number = 81 if step > 0 else 80
     return {"single": ("cc", number, 127), "label": f"{'next' if step > 0 else 'previous'} patch (CC {number})"}
 

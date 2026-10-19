@@ -63,13 +63,6 @@ marker. Writing `2A` back is untested.
 reports the same identity (model `58`, firmware `3.10`), and all the SysEx above works unchanged,
 including `31` ignoring effects 4–6. Verified on one MS-50G, from a Mac over USB:
 
-**MIDISTOMP v1.2** is built on Zoom's MS-70CDR 2.10 OS for every pedal. On an MS-50G it reports
-model `61` and firmware `2.10`, and SysEx only answers with `61` in place of `58` (`F0 52 00 61 …`).
-With that byte, editor mode (`50`/`51`), current program (`33`), read patch (`29`, the same 146
-bytes; all 50 patches survived the update unchanged), and write + store (`28` + `32`) work as
-above. `31` and the settings block (`2B`) weren't tried on v1.2. The CC, PC, clock and transport
-table below was rechecked on v1.2, including the MIDI CHANNEL filter.
-
 | Message | Bytes | Notes |
 |---|---|---|
 | Effect n on/off | `B0 cc vv` | `cc` = 10n+4 (14, 24, 34, 44, 54, 64); `vv` 0–63 off, 64–127 on. All six effects, no editor mode needed. |
@@ -83,6 +76,14 @@ table below was rechecked on v1.2, including the MIDI CHANNEL filter.
 Other CCs (e.g. CC 7) do nothing. The MIDI menu (left knob → MIDI) can turn each message type off
 and set MIDI CHANNEL (OMNI or 1–16). With a channel set, CC and PC on other channels are ignored.
 Clock, Start and Stop have no channel.
+
+**MIDISTOMP v1.2** is built on Zoom's MS-70CDR 2.10 OS for every pedal. On an MS-50G it reports
+model `61` and firmware `2.10`, and it only answers SysEx addressed to model `61`
+(`F0 52 00 61 …`); its replies carry `61` too. With that byte, editor mode (`50`/`51`), current
+program (`33`), read patch (`29`, the same 146 bytes; all 50 patches survived the update
+unchanged), write + store (`28` + `32`) and the settings read (`2B` → `2A`) work as above. `31`
+wasn't tried on v1.2. The CC, PC, clock and transport table above was rechecked on v1.2,
+including the MIDI CHANNEL filter.
 
 **Replies stay on channel 1.** The current-program reply to `33` is `B0 00 00 B0 20 00 C0 pp` on
 channel 1 whatever MIDI CHANNEL is set to. It only came back after editor mode on (`50`).
