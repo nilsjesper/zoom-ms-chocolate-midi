@@ -82,8 +82,9 @@ model `61` and firmware `2.10`, and it only answers SysEx addressed to model `61
 (`F0 52 00 61 …`); its replies carry `61` too. With that byte, editor mode (`50`/`51`), current
 program (`33`), read patch (`29`, the same 146 bytes; all 50 patches survived the update
 unchanged), write + store (`28` + `32`) and the settings read (`2B` → `2A`) work as above. `31`
-wasn't tried on v1.2. The CC, PC, clock and transport table above was rechecked on v1.2,
-including the MIDI CHANNEL filter.
+wasn't tried on v1.2. Rechecked on v1.2, with editor mode on: effect on/off and knobs, CC 80/81,
+Program Change with START NO. 0, clock, and the MIDI CHANNEL filter. Start/Stop were accepted.
+The tuner CC and START NO. 1 weren't retried.
 
 **Replies stay on channel 1.** The current-program reply to `33` is `B0 00 00 B0 20 00 C0 pp` on
 channel 1 whatever MIDI CHANNEL is set to. It only came back after editor mode on (`50`).

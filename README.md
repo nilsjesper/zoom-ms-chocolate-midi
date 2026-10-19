@@ -8,8 +8,8 @@ It works with Zoom's stock 3.10 firmware. With [MIDISTOMP](https://github.com/ma
 firmware it can also switch effects 4-6 and move knobs over MIDI CC.
 
 Tested on one MS-50G and one Chocolate Plus with stock firmware. On MIDISTOMP v1.0 and v1.2 the
-preset's messages were checked on the pedal from a Mac, but not yet sent through the Chocolate. Unofficial
-and not affiliated with Zoom, M-VAVE or MIDISTOMP. Use at your own risk.
+preset's messages were checked on the pedal from a Mac, but not yet sent through the Chocolate.
+Unofficial and not affiliated with Zoom, M-VAVE or MIDISTOMP. Use at your own risk.
 
 The MS-50G+ and other MS Plus pedals use a different protocol; see
 [zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander) for those.
@@ -65,8 +65,8 @@ Switch groups on the Chocolate with E (A+B) and F (C+D). Change the layout in `l
 ```python
 (1, "D"): effect_toggle(1),            # effect 1 on/off
 (3, "A"): program(12),                 # patch 12 as numbered on the pedal
-(3, "C"): patch_step(-1),              # previous patch (MIDISTOMP v1.1+); patch_step(1) = next
 (3, "B"): cc_toggle(20, channel=1),    # CC 20 on channel 1 for other gear, 127 / 0
+(3, "C"): patch_step(-1),              # previous patch (MIDISTOMP v1.1+); patch_step(1) = next
 ```
 
 MIDISTOMP uses CC 14-73 for effects and knobs, so a CC meant for other gear on the same Chocolate
@@ -91,10 +91,11 @@ swift tools/zoomio.swift probe                # send unknown SysEx commands, rep
 swift tools/midimon.swift 120                 # print MIDI from the Chocolate and pedal for 120 s
 ```
 
-`backup` and `probe` find the pedal's Program Change channel and numbering on their own. All
-three read the pedal's model from its identity reply: MIDISTOMP v1.2 is built on Zoom's MS-70CDR
-firmware, so it answers SysEx as model `61` instead of `58`. `probe`
+`backup` and `probe` find the pedal's Program Change channel and numbering on their own. `probe`
 skips known write commands, but back up your patches before running it.
+
+zoomio reads the pedal's model from its identity reply. MIDISTOMP v1.2 is built on Zoom's
+MS-70CDR firmware, so it answers SysEx as model `61` instead of `58`.
 
 ## Ideas
 
