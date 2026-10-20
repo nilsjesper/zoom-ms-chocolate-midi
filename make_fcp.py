@@ -3,10 +3,9 @@
 original Zoom MS-50G through the Chocolate's USB host port.
 
 Usage:
-  python3 make_fcp.py                     # MIDISTOMP v1.2, MIDI channel 1, layout.toml -> chocolate.fcp
+  python3 make_fcp.py                     # MIDISTOMP, MIDI channel 1, layout.toml -> chocolate.fcp
   python3 make_fcp.py --channel 2         # match the pedal's MIDI CHANNEL setting (MIDISTOMP)
   python3 make_fcp.py --pc-start 1        # match the pedal's PROG CH START NO. (MIDISTOMP)
-  python3 make_fcp.py --model 58          # MIDISTOMP v1.0/v1.1 (SysEx model 58 instead of 61)
   python3 make_fcp.py --firmware stock    # Zoom's stock 3.10 firmware (effects 1-3 only)
   python3 make_fcp.py -l other.toml       # custom layout file
   python3 make_fcp.py -o my.fcp           # custom output path
@@ -32,26 +31,20 @@ MODE_TWO_BANKS = 0x01      # alternates bank A / bank B; the first press after i
 TYPE_PC, TYPE_CC, TYPE_SYSEX = 0x00, 0x01, 0x04
 SWITCHES = "ABCD"
 
-# Set from the command line in main(); see --firmware, --channel, --pc-start and --model.
+# Set from the command line in main(); see --firmware, --channel and --pc-start.
 FIRMWARE = "midistomp"     # "midistomp" or "stock"
 CHANNEL = 1                # MIDI channel (1-16) for PC and CC sent to the pedal
 PC_START = 0               # MIDISTOMP's PROG CH START NO. setting; stock is always 0
-MODEL = 0x61               # SysEx model byte: 58 for the MS-50G OS (stock, MIDISTOMP v1.0/v1.1), 61 for MIDISTOMP v1.2+
 
 
-# --- MS-50G messages ------------------------------------------------------------
+# --- MS-50G messages (stock firmware only; MIDISTOMP builds send only PC and CC) ----
 def sysex(*body: int) -> bytes:
-    return bytes([0xF0, 0x52, 0x00, MODEL, *body, 0xF7])
+    return bytes([0xF0, 0x52, 0x00, 0x58, *body, 0xF7])
 
 
 def editor_on() -> bytes:
     """Required once after power-up before 0x31 works."""
     return sysex(0x50)
-
-
-def editor_off() -> bytes:
-    """Also discards unsaved edits (reverts the edit buffer)."""
-    return sysex(0x51)
 
 
 def effect_sysex(slot: int, on: bool) -> bytes:
@@ -64,8 +57,8 @@ def effect_sysex(slot: int, on: bool) -> bytes:
 # --- Footswitch behaviors -------------------------------------------------------
 # A bank is one message or a list of messages, sent in list order.
 # A message is ("sysex", bytes), ("cc", number, value[, channel]) or ("pc", program[, channel]).
-# Without a channel, PC and CC go out on CHANNEL. Only one "sysex" message per bank (the
-# Chocolate has a single SysEx field per bank).
+# Without a channel, PC and CC go out on CHANNEL. A bank is either one "sysex" message or a list
+# of PC/CC messages: the Chocolate garbles a bank that mixes them (see docs/PROTOCOL.md).
 
 def effect_toggle(effect: int) -> dict:
     """effect = 1-6 as shown on the pedal (1-3 on stock firmware). First press turns it off.
@@ -87,21 +80,11 @@ def cc_toggle(number: int, label: str = "", channel: int | None = None) -> dict:
             "label": label or f"CC {number} 127/0" + (f" ch {channel}" if channel else "")}
 
 
-def program(patch: int, revert: bool = True) -> dict:
+def program(patch: int) -> dict:
     """patch = number shown on the pedal (1-50). Sent as PC patch-1, or PC patch when
-    MIDISTOMP's PROG CH START NO. is 1 (--pc-start 1).
-
-    A Program Change makes the pedal save any unsaved edits (for example an effect switched off
-    by another footswitch) into the patch being left. With revert=True editor-off is sent first
-    so those edits are discarded instead."""
+    MIDISTOMP's PROG CH START NO. is 1 (--pc-start 1)."""
     pc = patch - 1 + PC_START
-    msgs = ([("sysex", editor_off())] if revert else []) + [("pc", pc)]
-    return {"single": msgs, "label": f"patch {patch:02d} ({'revert + ' if revert else ''}PC {pc})"}
-
-
-def revert_edits() -> dict:
-    """Discards unsaved edits on the pedal (editor-off), then re-enables editor mode."""
-    return {"single": ("sysex", editor_off() + editor_on()), "label": "discard edits"}
+    return {"single": ("pc", pc), "label": f"patch {patch:02d} (PC {pc})"}
 
 
 def patch_step(step: int) -> dict:
@@ -120,8 +103,7 @@ def patch_step(step: int) -> dict:
 ACTIONS = {
     "cc_toggle": (("cc",), ("label", "channel")),
     "effect_toggle": (("effect",), ()),
-    "program": (("patch",), ("revert",)),
-    "revert_edits": ((), ()),
+    "program": (("patch",), ()),
     "patch_step": (("step",), ()),
 }
 COMMON = ("group", "switch", "action", "firmware")
@@ -192,11 +174,7 @@ def load_layout(path: str) -> dict:
         elif action == "program":
             if not isinstance(entry["patch"], int) or not 1 <= entry["patch"] <= 50:
                 fail(path, n, f"{where}: patch must be an integer 1-50, got {entry['patch']!r}")
-            if not isinstance(entry.get("revert", True), bool):
-                fail(path, n, f"{where}: revert must be true or false, got {entry['revert']!r}")
-            layout[(group, switch)] = program(entry["patch"], entry.get("revert", True))
-        elif action == "revert_edits":
-            layout[(group, switch)] = revert_edits()
+            layout[(group, switch)] = program(entry["patch"])
         elif action == "patch_step":
             if FIRMWARE != "midistomp":
                 fail(path, n, f"{where}: patch_step needs MIDISTOMP firmware")
@@ -209,7 +187,8 @@ def load_layout(path: str) -> dict:
 def write_bank(buf: bytearray, base: int, list_off: int, data_off: int, bank) -> None:
     msgs = [bank] if isinstance(bank, tuple) else list(bank)
     assert 0 < len(msgs) <= MAX_ENTRIES, f"a bank holds 1-{MAX_ENTRIES} messages"
-    assert sum(m[0] == "sysex" for m in msgs) <= 1, "only one SysEx message per bank"
+    assert len(msgs) == 1 or all(m[0] != "sysex" for m in msgs), \
+        "a bank is either one SysEx message or a list of PC/CC messages"
     for i, msg in enumerate(msgs):
         kind = msg[0]
         if kind == "sysex":
@@ -255,17 +234,11 @@ def main() -> int:
                     help="MIDI channel for PC/CC; match MIDISTOMP's MIDI CHANNEL (OMNI: any)")
     ap.add_argument("--pc-start", type=int, choices=[0, 1], default=0,
                     help="MIDISTOMP's PROG CH START NO. setting (stock firmware: 0)")
-    ap.add_argument("--model", choices=["58", "61"],
-                    help="SysEx model byte: 61 for MIDISTOMP v1.2+ (default with midistomp), "
-                         "58 for MIDISTOMP v1.0/v1.1 and stock (default with stock)")
     args = ap.parse_args()
-    global FIRMWARE, CHANNEL, PC_START, MODEL
+    global FIRMWARE, CHANNEL, PC_START
     FIRMWARE, CHANNEL, PC_START = args.firmware, args.channel, args.pc_start
-    MODEL = int(args.model, 16) if args.model else (0x61 if FIRMWARE == "midistomp" else 0x58)
     if FIRMWARE == "stock" and PC_START:
         ap.error("--pc-start 1 needs MIDISTOMP firmware")
-    if FIRMWARE == "stock" and MODEL != 0x58:
-        ap.error("stock MS-50G firmware is model 58")
 
     layout = load_layout(args.layout)
     buf = bytearray(open(args.template, "rb").read())

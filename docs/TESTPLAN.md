@@ -1,7 +1,9 @@
 # Test plan
 
-Checks for the behaviours added on 2026-10-01 (editor-off before a Program Change, multi-message
-banks, `layout.toml`). Items marked **done** were run on the project's MS-50G (fw 3.10) from a Mac.
+Checks for the behaviors added on 2026-10-01 (Program Change and editor-off findings,
+multi-message banks, `layout.toml`). Sending editor-off before a `program` switch's PC was
+dropped on 2026-10-20: the Chocolate can't send SysEx and a PC from one switch (T4), and
+discarding edits wasn't needed. Items marked **done** were run on the project's MS-50G (fw 3.10) from a Mac.
 The remaining two need the Chocolate and a foot on the pedal.
 
 ## Done: Program Change stores edits, editor-off reverts them
@@ -42,25 +44,30 @@ verified. If nothing arrives, the README's router note should drop the "pedal re
 
 ## T4: the Chocolate sends list entries in list order
 
-Needs: Chocolate in U mode on the Mac, CubeSuite.
+**Done 2026-10-20** (Chocolate in U mode on the Mac, CubeSuite import, `midimon`, Advanced custom
+mode 1). Probe presets with one combination per switch:
 
-1. In `layout.toml`, uncomment the group 3 A `program` example (patch 12). `python3 make_fcp.py`.
-2. CubeSuite → Import → `chocolate.fcp`.
-3. `swift tools/midimon.swift 60`, press group 3 A (switch to group 3 with E/F first).
+| Bank | Sent |
+|---|---|
+| PC alone | `C0 0C` |
+| PC, CC | `C0 0D B0 51 7F` |
+| CC, PC | `B0 50 7F C0 0E` |
+| SysEx alone | `F0 52 00 61 51 F7` |
+| SysEx, PC (the old `program` switch) | `F0 52 00 61 51 F7` twice, no PC |
+| SysEx, CC | `F0 52 00 61 51 F7` twice, no CC |
+| PC, SysEx | `C0 0B C0 00 C0 00` |
 
-Expected from `SINCO`: `F0 52 00 61 51 F7` (`58` when built with `--model 58` or `--firmware
-stock`) then `C0 0B`, in that order.
+So PC/CC lists are sent in order, and SysEx can't share a bank with them. CubeSuite's editor
+allows only one or the other as well. `program` now sends the PC alone, and `make_fcp.py`
+refuses a mixed bank.
 
-Result: _not run yet_. If the PC arrives first, the Chocolate orders entries by type and the
-in-bank revert doesn't work: make `program` ignore `revert`, keep `revert_edits` as the way to
-discard, and update README "Things to know". If the SysEx never arrives, check the record's
-SysEx field in the generated file (offset 0x0A1 of the record).
+A probe built as Advanced custom mode 2 (header byte `04`) left the display on `cub`, and the
+switches sent CC 20–23 (127 on press, 0 on release) instead of the preset; importing a mode 1 file
+brought it back.
 
 ## Regression
 
-- `python3 make_fcp.py -o /tmp/x.fcp` writes 23,646 bytes. With the shipped `layout.toml`,
-  compared with `cmp` against the generator before `layout.toml`: `--firmware stock` is
-  byte-identical; the MIDISTOMP builds (default, `--channel 2`, `--pc-start 1`) differ only in
-  group 2 A, which now sends editor-off before its Program Change. With `revert = false` on that
-  switch the default build is byte-identical.
-- Group 1 and 2 switches behave as before after import: tuner, effect toggles, patch 1.
+- `python3 make_fcp.py -o /tmp/x.fcp` writes 23,646 bytes. With the shipped `layout.toml`, the
+  default, `--firmware stock`, `--channel 2` and `--pc-start 1` builds are byte-identical
+  (`cmp`) to the generator before `layout.toml`.
+- After import: group 1 A sent `B0 4A 7F` (tuner), group 2 A sent `C0 00` (patch 1) alone.

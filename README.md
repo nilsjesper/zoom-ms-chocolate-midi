@@ -23,7 +23,6 @@ The MS-50G+ and other MS Plus pedals use a different protocol; see
 | Effect knobs | effects 1-3 (SysEx) | yes (CC 15-73) |
 | Tuner on/off | yes (CC 74) | yes (CC 74) |
 | Jump to a patch | yes (Program Change) | yes (Program Change) |
-| Discard unsaved edits | yes (SysEx `51`) | yes (SysEx `51`) |
 | Next/previous patch | no | yes (CC 80/81, v1.1 and later) |
 | Tap tempo | no | no |
 
@@ -41,10 +40,9 @@ To program the Chocolate, set the switch to **U** and connect its USB-C to a com
 ## Usage
 
 ```sh
-python3 make_fcp.py                     # MIDISTOMP v1.2, MIDI channel 1, layout.toml -> chocolate.fcp
+python3 make_fcp.py                     # MIDISTOMP, MIDI channel 1, layout.toml -> chocolate.fcp
 python3 make_fcp.py --channel 2         # pedal's MIDI CHANNEL is 2
 python3 make_fcp.py --pc-start 1        # pedal's PROG CH START NO. is 1
-python3 make_fcp.py --model 58          # MIDISTOMP v1.0 or v1.1
 python3 make_fcp.py --firmware stock    # stock firmware
 python3 make_fcp.py -l other.toml       # another layout file
 ```
@@ -73,7 +71,7 @@ examples:
 [[switch]]
 group = 3
 switch = "A"
-action = "program"        # jump to patch 12 as shown on the pedal (discards unsaved edits first)
+action = "program"        # jump to patch 12 as shown on the pedal
 patch = 12
 
 [[switch]]
@@ -88,17 +86,14 @@ group = 3
 switch = "C"
 action = "patch_step"     # previous patch (MIDISTOMP v1.1+); step = 1 for next
 step = -1
-
-[[switch]]
-group = 3
-switch = "D"
-action = "revert_edits"   # discard unsaved edits, stay on the current patch
 ```
 
 An entry with `firmware = "midistomp"` (or `"stock"`) is only used when building for that
-firmware; the default group 2 is MIDISTOMP-only this way. A switch can send several messages per
-press, in order, with at most one SysEx message among them: a `program` switch sends editor-off
-and then the Program Change.
+firmware; the default group 2 is MIDISTOMP-only this way.
+
+MIDISTOMP builds send only Program Change and CC; SysEx is used only for stock firmware's effect
+on/off. A Chocolate switch sends either one SysEx field or a list of PC/CC messages (in list
+order), not both: a bank that mixes them comes out garbled, so `make_fcp.py` refuses one.
 
 MIDISTOMP uses CC 14-73 for effects and knobs, so a CC meant for other gear on the same Chocolate
 can move a knob. To avoid that, set the pedal's MIDI CHANNEL to 2, build with `--channel 2`, and
@@ -111,10 +106,8 @@ send the other gear's CCs on channel 1.
   switch can do the opposite of what you expect; press it again.
 - **Leaving a patch saves pending edits.** A Program Change received over MIDI stores unsaved
   edits (an effect you toggled with the Chocolate, for example) into the patch being left. Checked
-  on stock 3.10 and on MIDISTOMP v1.2, for edits made by SysEx and by CC. A `program` switch
-  therefore sends editor-off (`F0 52 00 58 51 F7`, `61` on v1.2) first, which discards them; set
-  `revert = false` for a plain Program Change. On MIDISTOMP v1.2 with AUTO SAVE on, `patch_step`
-  (CC 80/81) also stores them, and it doesn't send editor-off.
+  on stock 3.10 and on MIDISTOMP v1.2, for edits made by SysEx and by CC. On MIDISTOMP v1.2 with
+  AUTO SAVE on, stepping with CC 80/81 stores them too.
 - Stock firmware ignores SysEx effect on/off until it gets editor mode (`F0 52 00 58 50 F7`), so
   each stock effect switch sends that first.
 

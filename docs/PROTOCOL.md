@@ -67,8 +67,8 @@ The effect-id → name/parameter table for 226 original-series effects (173 on t
   the toggle is in memory). Any PC with a dirty edit buffer does it, whether it re-selects the
   same patch or leaves it. zoom-explorer adds **[zx]**: auto-save off makes no difference, edits
   made on the pedal count too, they survive a power cycle, and the pedal's own footswitch stores
-  nothing. `make_fcp.py`'s `program()` sends `51` before the PC for this reason; verified that
-  `31`, `51`, PC leaves the patch untouched.
+  nothing. Sending `51` before the PC discards the edits instead: verified that `31`, `51`, PC
+  leaves the patch untouched.
 - Oddity: after a PC to the *same* patch, `29` keeps returning the old stored values for several
   seconds, yet after moving to another patch and back the edits are there. Don't use a same-patch
   PC plus `29` to check what was stored.
@@ -148,8 +148,17 @@ settings block (`2B` → `2A`). It read 0 with TEMPO LOCK off; reading it while 
 - **U mode**: USB-C is a normal USB MIDI device (use this for CubeSuite). The host port is off.
 - SysEx passes through the host port unchanged.
 - One SysEx field per bank (manual: max 200 bytes); several PC/CC/Note entries per bank are allowed.
-  `make_fcp.py` assumes entries are sent in list order (SysEx entry first, then PC); not yet
-  checked with midimon (test T4 in [`TESTPLAN.md`](TESTPLAN.md)).
+- **A bank is SysEx or PC/CC, not both** (CubeSuite's editor enforces this too). Checked with
+  midimon in Advanced custom mode 1 (test T4 in [`TESTPLAN.md`](TESTPLAN.md)):
+  - PC and CC entries are sent in list order: PC + CC gave `C0 0D B0 51 7F`, CC + PC gave
+    `B0 50 7F C0 0E`. A lone SysEx entry sends the field once.
+  - SysEx entry, then PC or CC: the SysEx field went out twice and the PC/CC never did.
+  - PC, then SysEx entry: `C0 0B C0 00 C0 00`, so the SysEx was lost and two stray PC 0s (patch
+    1) were sent.
+- Header byte 0 `04` (Advanced custom mode 2, as CubeSuite exports it) left the Chocolate showing
+  **`cub`**, even after a power cycle, and the switches ignored the preset: A–D sent CC 20–23
+  (127 on press, 0 on release). Importing a mode 1 file (`03`) fixed it. A mode 2 export differs
+  from mode 1 only in that byte and a shorter tail.
 - In two-bank ("switch between two banks") mode, the **first press after an import sends bank B**.
 - Two-bank toggles are blind: they don't know the pedal's state, so changing patches or stepping
   on the pedal itself can put them out of step.
@@ -163,7 +172,7 @@ Record index = `(group − 1) × 4 + switch` (A = 0 … D = 3), verified for gro
 
 | Offset | Meaning |
 |---|---|
-| 0 | Device mode (`03` = Advanced custom mode) |
+| 0 | Device mode (`03` = Advanced custom mode 1, `04` = Advanced custom mode 2) |
 | 4, 6, 8, 10 | Custom-mode CC numbers for switches A–D |
 | 12 | Custom-mode CC for "I" (the expression/pedal jack; default 7) |
 | 13… | "Interface" list: 5-byte entries `01, channel−1, CC, loosen value, step-on value` |
