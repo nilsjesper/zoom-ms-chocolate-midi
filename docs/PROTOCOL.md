@@ -68,6 +68,7 @@ including `31` ignoring effects 4–6. Verified on one MS-50G, from a Mac over U
 | Effect n on/off | `B0 cc vv` | `cc` = 10n+4 (14, 24, 34, 44, 54, 64); `vv` 0–63 off, 64–127 on. All six effects, no editor mode needed. |
 | Effect n, knob k | `B0 cc vv` | `cc` = 10n+4+k (k = 1–9, so CC 15–73); `vv` 0–127 spans the knob's whole range. A knob the effect lacks does nothing. |
 | Tuner | `B0 4A vv` | CC 74, as stock. |
+| Previous / next patch | `B0 50 vv` / `B0 51 vv` | CC 80 / 81, MIDISTOMP v1.1+. `vv` 64–127 steps once, wrapping between patch 50 and 1; 0–63 does nothing. Follows CC RECEIVE and MIDI CHANNEL. |
 | Program Change | `C0 pp` | PROG CH START NO. 0: `pp` 0–49 = patch 1–50 (stock numbering). START NO. 1: `pp` 1–50 = patch 1–50, PC 0 ignored. |
 | MIDI clock | `F8` | 24 per beat; sets the patch tempo after about 2 beats, held to 40–250 BPM. |
 | Start / Stop | `FA` / `FC` | For MIDISTOMP's custom effects; no visible change on stock effects. |
@@ -75,6 +76,15 @@ including `31` ignoring effects 4–6. Verified on one MS-50G, from a Mac over U
 Other CCs (e.g. CC 7) do nothing. The MIDI menu (left knob → MIDI) can turn each message type off
 and set MIDI CHANNEL (OMNI or 1–16). With a channel set, CC and PC on other channels are ignored.
 Clock, Start and Stop have no channel.
+
+**MIDISTOMP v1.2** is built on Zoom's MS-70CDR 2.10 OS for every pedal. On an MS-50G it reports
+model `61` and firmware `2.10`, and it only answers SysEx addressed to model `61`
+(`F0 52 00 61 …`); its replies carry `61` too. With that byte, editor mode (`50`/`51`), current
+program (`33`), read patch (`29`, the same 146 bytes; all 50 patches survived the update
+unchanged), write + store (`28` + `32`) and the settings read (`2B` → `2A`) work as above. `31`
+wasn't tried on v1.2. Rechecked on v1.2, with editor mode on: effect on/off and knobs, CC 80/81,
+Program Change with START NO. 0, clock, and the MIDI CHANNEL filter. Start/Stop were accepted.
+The tuner CC and START NO. 1 weren't retried.
 
 **Replies stay on channel 1.** The current-program reply to `33` is `B0 00 00 B0 20 00 C0 pp` on
 channel 1 whatever MIDI CHANNEL is set to. It only came back after editor mode on (`50`).

@@ -1,4 +1,4 @@
-// zoomio: talk to an original Zoom MS-50G (model 0x58) over USB MIDI on macOS.
+// zoomio: talk to an original Zoom MS-50G over USB MIDI on macOS (model 0x58, or 0x61 on MIDISTOMP v1.2+).
 //   swift tools/zoomio.swift backup <file>   save all 50 patches (changes patch, then restores it)
 //   swift tools/zoomio.swift read            current program, settings block (2B), current patch
 //   swift tools/zoomio.swift probe           send unknown single-byte SysEx commands, report replies
@@ -27,7 +27,7 @@ func wait(_ s: Double) { RunLoop.main.run(until: Date().addingTimeInterval(s)) }
 func take() -> [UInt8] { lock.lock(); let r = rx; rx = []; lock.unlock(); return r }
 func xfer(_ b: [UInt8], _ t: Double = 0.4) -> [UInt8] { _ = take(); send(b); wait(t); return take() }
 func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02X", $0) }.joined(separator: " ") }
-let Z: [UInt8] = [0xF0, 0x52, 0x00, 0x58]
+var Z: [UInt8] = [0xF0, 0x52, 0x00, 0x58]  // model byte set from the identity reply below
 func prog() -> Int { let r = xfer(Z + [0x33, 0xF7], 0.3); if let i = r.firstIndex(of: 0xC0), i + 1 < r.count { return Int(r[i+1]) }; return -1 }
 func patch() -> [UInt8] { xfer(Z + [0x29, 0xF7], 0.8) }
 // Program Change channel and numbering. Stock: channel 1, PC 0 = patch 1. MIDISTOMP firmware
@@ -50,6 +50,11 @@ func findPC() -> Bool {
 
 let mode = CommandLine.arguments.dropFirst().first ?? ""
 if dst == 0 { print("ZOOM MS Series not connected"); exit(1) }
+// Identity reply F0 7E 00 06 02 52 mm ...: mm = 58 for the MS-50G OS (stock, MIDISTOMP v1.0/v1.1),
+// 61 for MIDISTOMP v1.2+, which is built on the MS-70CDR OS. SysEx only answers to that byte.
+let id = xfer([0xF0, 0x7E, 0x00, 0x06, 0x01, 0xF7], 0.5)
+if let i = id.firstIndex(of: 0x52), i + 1 < id.count { Z[3] = id[i + 1] }
+print(String(format: "model %02X", Z[3]))
 if prog() < 0 { send(Z + [0x50, 0xF7]); wait(0.3); if prog() < 0 { print("pedal not responding"); exit(1) } }
 if mode == "backup" {
   send(Z + [0x50, 0xF7]); wait(0.3)
