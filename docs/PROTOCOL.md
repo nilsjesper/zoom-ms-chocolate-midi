@@ -9,7 +9,13 @@ Not affiliated with Zoom or M-VAVE.
 ## Zoom MS-50G (original, not the MS-50G+)
 
 The MS Plus series (MS-50G+, MS-70CDR+, …) uses a different protocol (model byte `0x6E`).
-Tools written for the Plus series do not work on the original MS-50G.
+Tools written only for the Plus series do not work on the original MS-50G. Original-series
+family codes are `58` (MS-50G), `5F` (MS-60B) and `61` (MS-70CDR).
+
+Rows and notes marked **[zx]** come from reading the
+[thammer/zoom-explorer](https://github.com/thammer/zoom-explorer) source (`src/ZoomDevice.ts`,
+`src/ZoomPatch.ts`), which drives the original MS series as well. They have not been verified on
+this pedal yet; the remaining checks are in [`TESTPLAN.md`](TESTPLAN.md).
 
 All SysEx below starts with `F0 52 00 58` (Zoom manufacturer id `52`, device `00`, model `58`).
 
@@ -19,24 +25,56 @@ All SysEx below starts with `F0 52 00 58` (Zoom manufacturer id `52`, device `00
 | Program Change | `C0 pp` | Selects patch; `pp` = 0–49 = pedal patch 1–50. |
 | Tuner | `B0 4A vv` | CC 74; `vv` ≥ 64 on, < 64 off. |
 | Editor mode on | `F0 52 00 58 50 F7` | **Required once after power-up** before parameter edits work. |
-| Editor mode off | `F0 52 00 58 51 F7` | The pedal stays unlocked until power-cycled. |
+| Editor mode off | `F0 52 00 58 51 F7` | Without it the pedal stays unlocked until power-cycled. Also **reverts the edit buffer**, discarding unsaved edits (verified: effect toggled by `31`, then `51`, reads back as stored). |
 | Effect on/off | `F0 52 00 58 31 ss 00 vv 00 F7` | `ss` = slot 0–2, `vv` = 01 on / 00 off. **Effects 4–6 are ignored.** |
 | Parameter edit | `F0 52 00 58 31 ss pp lo hi F7` | `pp` = 2… for knobs (from the g200kg doc; effects 1–3 only). |
-| Current program | `F0 52 00 58 33 F7` | Reply: `B0 00 00 B0 20 00 C0 pp`. |
-| Read patch | `F0 52 00 58 29 F7` | Reply: 146-byte patch starting `F0 52 00 58 28`. |
+| Edit report (pedal → host) | `F0 52 00 58 31 ss pp lo hi F7` | Sent by the pedal, in editor mode, for every edit made on the pedal: `pp` = 0 is on/off, 2… knobs (verified on MIDISTOMP v1.2: a stomp sent `31 00 00 00 00`, a knob sent `31 00 04 vv 00` per step). |
+| Auto-save report (pedal → host) | `F0 52 00 58 32 01 00 00 pp 00 00 00 00 00 F7` | With AUTO SAVE on, about 5 s after the last edit made on the pedal, it stores the patch and sends this (the same bytes as Store patch). Seen on MIDISTOMP v1.2 in editor mode. |
+| Current program | `F0 52 00 58 33 F7` | Reply: `B0 00 00 B0 20 00 C0 pp`. **[zx]** The pedal never sends a PC on its own when the user changes patch; zoom-explorer polls this every 500 ms. |
+| Read patch | `F0 52 00 58 29 F7` | Reply: 146-byte patch starting `F0 52 00 58 28`. **[zx]** Right after an effect is added or deleted on the pedal the effect-count field can be stale; read again. |
+| Read stored patch | `F0 52 00 58 09 00 00 pp F7` | **[zx]** Reply `F0 52 00 58 08 00 00 pp <len lo> <len hi> <patch>`; byte 7 echoes `pp`. Reads a slot without changing program (`backup` currently uses PC + `29`). |
 | Write patch | `F0 52 00 58 28 <patch> F7` | Writes the current patch (in memory). |
 | Store patch | `F0 52 00 58 32 01 00 00 pp 00 00 00 00 00 F7` | Saves to memory slot `pp`. Destructive. |
 | Read settings | `F0 52 00 58 2B F7` | Reply: `2A` + 28 bytes; see below. |
 
-**Patch data:** effect on/off is bit 0 of patch bytes 6, 26, 47, 67, 88, 108 (effects 1–6).
-Tempo is stored per patch in bytes 130–131. Details in the
+**Patch data:** in the raw 146-byte message, effect on/off is bit 0 of bytes 6, 26, 47, 67, 88,
+108 (effects 1–6) and tempo is in bytes 130–131. Details in the
 [g200kg MIDI message doc](https://github.com/g200kg/zoom-ms-utility/blob/master/midimessage.md).
+
+The raw message is a 5-byte header plus 7-bit groups (1 MSB byte + 7 data bytes), so unpacked
+offset `u` sits at raw byte `6 + 8·(u div 7) + (u mod 7)`. **[zx]** Unpacked layout, from
+`ZoomPatch.readMSPatch`:
+
+| Unpacked | Size | Meaning |
+|---|---|---|
+| 0 | 6 × 18 | One 18-byte block per effect slot. Bits LSB-first from byte 0: bit 0 on/off, bits 1–28 effect id, then three 13-bit parameters, five 8-bit parameters, 20 unknown bits, one more 8-bit parameter. |
+| 108 | 3 | Status: byte 0 bits 0–5 "DSP full", bits 6–7 + byte 1 bit 0 current slot (counted from the right), byte 1 bits 2–4 effect count, tempo = byte 1 bits 5–7 (low) + byte 2 bits 0–4 (high). |
+| 111 | 10 | Patch name (ASCII). |
+| 121 | 1 | Unknown. |
+
+The effect-id → name/parameter table for 226 original-series effects (173 on the MS-50G) is
+`public/zoom-effect-mappings-msog.json` in the zoom-explorer repo.
 
 **What doesn't exist (verified):**
 - No CC changes the patch: all 128 CCs were sent with values 127/64/1/0.
 - No "next patch" message, no tap-tempo message. Tempo changes need a full patch write.
 - `0x31` on/off does nothing for effects 4–6. The workaround is a full patch write, which is a
-  snapshot of one specific patch.
+  snapshot of one specific patch. **[zx]** zoom-explorer does exactly this for slots 4–6 and
+  warns of a brief audio mute.
+
+**Gotchas:**
+- A **Program Change received over MIDI stores unsaved edits** into the current patch slot
+  (verified here with `zoomio edits`: toggle effect 1 with `31`, send a PC, move away and back,
+  the toggle is in memory). Any PC with a dirty edit buffer does it, whether it re-selects the
+  same patch or leaves it. zoom-explorer adds **[zx]**: auto-save off makes no difference, edits
+  made on the pedal count too, they survive a power cycle, and the pedal's own footswitch stores
+  nothing. Sending `51` before the PC discards the edits instead: verified that `31`, `51`, PC
+  leaves the patch untouched.
+- Oddity: after a PC to the *same* patch, `29` keeps returning the old stored values for several
+  seconds, yet after moving to another patch and back the edits are there. Don't use a same-patch
+  PC plus `29` to check what was stored.
+- `51` discards the edit buffer, so `zoomio backup`/`read`/`probe`, which end with `51`, throw
+  away unsaved edits on the pedal.
 
 **Other commands that reply** (none changed the patch or program; meaning unknown):
 `01`, `0E` → `00 0B` · `04`, `05` → `00 00` · `07` → `06 32 00 7A 00` · `16` → `17 xx 00 00 00 00` ·
@@ -81,8 +119,11 @@ Clock, Start and Stop have no channel.
 model `61` and firmware `2.10`, and it only answers SysEx addressed to model `61`
 (`F0 52 00 61 …`); its replies carry `61` too. With that byte, editor mode (`50`/`51`), current
 program (`33`), read patch (`29`, the same 146 bytes; all 50 patches survived the update
-unchanged), write + store (`28` + `32`) and the settings read (`2B` → `2A`) work as above. `31`
-wasn't tried on v1.2. Rechecked on v1.2, with editor mode on: effect on/off and knobs, CC 80/81,
+unchanged), write + store (`28` + `32`), the settings read (`2B` → `2A`) and effect on/off
+(`31`, slot 0) work as above. The gotchas above hold on v1.2 too, for edits made with `31` and
+with the effect CCs: `51` discards them, a Program Change stores them, and `51` before the PC
+keeps the patch clean (`zoomio edits`, plus the same steps by CC). With AUTO SAVE on, stepping
+with CC 81 and back with CC 80 also stored a CC edit. Rechecked on v1.2, with editor mode on: effect on/off and knobs, CC 80/81,
 Program Change with START NO. 0, clock, and the MIDI CHANNEL filter. Start/Stop were accepted.
 The tuner CC and START NO. 1 weren't retried.
 
@@ -108,6 +149,17 @@ settings block (`2B` → `2A`). It read 0 with TEMPO LOCK off; reading it while 
 - **U mode**: USB-C is a normal USB MIDI device (use this for CubeSuite). The host port is off.
 - SysEx passes through the host port unchanged.
 - One SysEx field per bank (manual: max 200 bytes); several PC/CC/Note entries per bank are allowed.
+- **A bank is SysEx or PC/CC, not both** (CubeSuite's editor enforces this too). Checked with
+  midimon in Advanced custom mode 1 (test T4 in [`TESTPLAN.md`](TESTPLAN.md)):
+  - PC and CC entries are sent in list order: PC + CC gave `C0 0D B0 51 7F`, CC + PC gave
+    `B0 50 7F C0 0E`. A lone SysEx entry sends the field once.
+  - SysEx entry, then PC or CC: the SysEx field went out twice and the PC/CC never did.
+  - PC, then SysEx entry: `C0 0B C0 00 C0 00`, so the SysEx was lost and two stray PC 0s (patch
+    1) were sent.
+- Header byte 0 `04` (Advanced custom mode 2, as CubeSuite exports it) left the Chocolate showing
+  **`cub`**, even after a power cycle, and the switches ignored the preset: A–D sent CC 20–23
+  (127 on press, 0 on release). Importing a mode 1 file (`03`) fixed it. A mode 2 export differs
+  from mode 1 only in that byte and a shorter tail.
 - In two-bank ("switch between two banks") mode, the **first press after an import sends bank B**.
 - Two-bank toggles are blind: they don't know the pedal's state, so changing patches or stepping
   on the pedal itself can put them out of step.
@@ -121,7 +173,7 @@ Record index = `(group − 1) × 4 + switch` (A = 0 … D = 3), verified for gro
 
 | Offset | Meaning |
 |---|---|
-| 0 | Device mode (`03` = Advanced custom mode) |
+| 0 | Device mode (`03` = Advanced custom mode 1, `04` = Advanced custom mode 2) |
 | 4, 6, 8, 10 | Custom-mode CC numbers for switches A–D |
 | 12 | Custom-mode CC for "I" (the expression/pedal jack; default 7) |
 | 13… | "Interface" list: 5-byte entries `01, channel−1, CC, loosen value, step-on value` |
@@ -149,6 +201,8 @@ The tail (after the 32 records) wasn't decoded; one byte changes with the select
 ## References
 
 - [g200kg/zoom-ms-utility — MIDI messages](https://github.com/g200kg/zoom-ms-utility/blob/master/midimessage.md)
+- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer) (`src/ZoomDevice.ts`,
+  `src/ZoomPatch.ts`) and [sym.bios.is](https://sym.bios.is): source of the **[zx]** items
 - [r/zoommultistomp: Chocolate + MS-50G thread](https://www.reddit.com/r/zoommultistomp/comments/1af8q6p/using_mvave_chocolate_to_change_between_effects/)
   ("MS-50G can only toggle the lower 3 effect slots directly by SysEx")
 - [Chocolate Plus software instructions (PDF)](https://manualf.oss-cn-hongkong.aliyuncs.com/manual/CUBE-TURNER/Chocolate%20Plus-Software%20instructions.pdf)

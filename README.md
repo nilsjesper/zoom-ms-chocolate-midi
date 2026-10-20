@@ -40,11 +40,14 @@ To program the Chocolate, set the switch to **U** and connect its USB-C to a com
 ## Usage
 
 ```sh
-python3 make_fcp.py                     # MIDISTOMP, MIDI channel 1 -> chocolate.fcp
+python3 make_fcp.py                     # MIDISTOMP, MIDI channel 1, layout.toml -> chocolate.fcp
 python3 make_fcp.py --channel 2         # pedal's MIDI CHANNEL is 2
 python3 make_fcp.py --pc-start 1        # pedal's PROG CH START NO. is 1
 python3 make_fcp.py --firmware stock    # stock firmware
+python3 make_fcp.py -l other.toml       # another layout file
 ```
+
+Needs Python 3.11 or newer (for `tomllib`).
 
 On MIDISTOMP, match `--channel` and `--pc-start` to the pedal's MIDI menu (press the left knob,
 then MIDI). Any channel works when MIDI CHANNEL is OMNI. A wrong `--pc-start` makes every patch
@@ -59,15 +62,38 @@ Default layout:
 | 1 | Tuner | Effect 3 | Effect 2 | Effect 1 |
 | 2 (MIDISTOMP) | Patch 1 | Effect 6 | Effect 5 | Effect 4 |
 
-Switch groups on the Chocolate with E (A+B) and F (C+D). Change the layout in `layout()` in
-`make_fcp.py`:
+Switch groups on the Chocolate with E (A+B) and F (C+D). To change the layout, edit
+`layout.toml` (or pass another file with `-l`). One `[[switch]]` table per footswitch; unlisted
+switches keep CubeSuite's default (PC 0). The file lists every action and has commented-out
+examples:
 
-```python
-(1, "D"): effect_toggle(1),            # effect 1 on/off
-(3, "A"): program(12),                 # patch 12 as numbered on the pedal
-(3, "B"): cc_toggle(20, channel=1),    # CC 20 on channel 1 for other gear, 127 / 0
-(3, "C"): patch_step(-1),              # previous patch (MIDISTOMP v1.1+); patch_step(1) = next
+```toml
+[[switch]]
+group = 3
+switch = "A"
+action = "program"        # jump to patch 12 as shown on the pedal
+patch = 12
+
+[[switch]]
+group = 3
+switch = "B"
+action = "cc_toggle"      # CC 20 on channel 1 for other gear, 127 / 0
+cc = 20
+channel = 1
+
+[[switch]]
+group = 3
+switch = "C"
+action = "patch_step"     # previous patch (MIDISTOMP v1.1+); step = 1 for next
+step = -1
 ```
+
+An entry with `firmware = "midistomp"` (or `"stock"`) is only used when building for that
+firmware; the default group 2 is MIDISTOMP-only this way.
+
+MIDISTOMP builds send only Program Change and CC; SysEx is used only for stock firmware's effect
+on/off. A Chocolate switch sends either one SysEx field or a list of PC/CC messages (in list
+order), not both: a bank that mixes them comes out garbled, so `make_fcp.py` refuses one.
 
 MIDISTOMP uses CC 14-73 for effects and knobs, so a CC meant for other gear on the same Chocolate
 can move a knob. To avoid that, set the pedal's MIDI CHANNEL to 2, build with `--channel 2`, and
@@ -78,7 +104,10 @@ send the other gear's CCs on channel 1.
 - After an import, the first press of a toggle turns the effect off, or the tuner on.
 - Toggles don't know the pedal's state. After a patch change or a press on the pedal itself, a
   switch can do the opposite of what you expect; press it again.
-- With AUTO SAVE on, toggled effects are saved into the patch when you leave it.
+- **Leaving a patch saves pending edits.** A Program Change received over MIDI stores unsaved
+  edits (an effect you toggled with the Chocolate, for example) into the patch being left. Checked
+  on stock 3.10 and on MIDISTOMP v1.2, for edits made by SysEx and by CC. On MIDISTOMP v1.2 with
+  AUTO SAVE on, stepping with CC 80/81 stores them too.
 - Stock firmware ignores SysEx effect on/off until it gets editor mode (`F0 52 00 58 50 F7`), so
   each stock effect switch sends that first.
 
@@ -88,11 +117,15 @@ send the other gear's CCs on channel 1.
 swift tools/zoomio.swift backup patches.txt   # save all 50 patches to a file
 swift tools/zoomio.swift read                 # current program, settings block, current patch
 swift tools/zoomio.swift probe                # send unknown SysEx commands, report replies
+swift tools/zoomio.swift send F0 52 00 61 29 F7   # send one raw message, print the reply
+swift tools/zoomio.swift edits                # rerun the "PC saves edits / 51 reverts" test (restores the patch)
 swift tools/midimon.swift 120                 # print MIDI from the Chocolate and pedal for 120 s
 ```
 
 `backup` and `probe` find the pedal's Program Change channel and numbering on their own. `probe`
-skips known write commands, but back up your patches before running it.
+skips known write commands, but back up your patches before running it. `backup`, `read` and
+`probe` finish with editor-off, which also discards unsaved edits on the pedal; `send` doesn't.
+What has and hasn't been checked on the hardware is in [docs/TESTPLAN.md](docs/TESTPLAN.md).
 
 zoomio reads the pedal's model from its identity reply. MIDISTOMP v1.2 is built on Zoom's
 MS-70CDR firmware, so it answers SysEx as model `61` instead of `58`.
@@ -100,10 +133,14 @@ MS-70CDR firmware, so it answers SysEx as model `61` instead of `58`.
 ## Ideas
 
 - Read the pedal's footswitch cycle list (decoded in PROTOCOL.md) and lay those patches out as
-  `program(n)` switches in groups 3-8.
+  `program` switches in groups 3-8.
 - Put a settings write (`2A`, 34 bytes) in a SysEx field to load a prepared cycle list in one
   press. Writing `2A` is untested.
 - With MIDISTOMP, sweep a knob CC from the Chocolate's expression input. Untried.
+- State-aware toggles and tap tempo need a small USB-host MIDI router that reads the pedal's
+  replies. The zoom-explorer source shows the raw material (the **[zx]** items in PROTOCOL.md):
+  in editor mode the pedal reports edits made on it as `31` SysEx, and patch changes made with
+  its own footswitch aren't announced, so the router has to poll `33`.
 
 ## References
 
@@ -115,7 +152,12 @@ MS-70CDR firmware, so it answers SysEx as model `61` instead of `58`.
   Arduino foot controller using the same SysEx.
 - [PhilDaThrill/MultistompMidi](https://github.com/PhilDaThrill/MultistompMidi): Python MultiStomp
   helpers (MS-70CDR; model byte `0x61`, `0x58` for the MS-50G).
-- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer): MS Plus protocol work.
+- [thammer/zoom-explorer](https://github.com/thammer/zoom-explorer) and its patch manager
+  [sym.bios.is](https://sym.bios.is): the README documents the MS Plus protocol, but the app and
+  source (`src/ZoomDevice.ts`, `src/ZoomPatch.ts`) also drive the original MS-50G/60B/70CDR
+  (confirmed on this MS-50G). PROTOCOL.md's **[zx]** items come from it. It also has a browser
+  MIDI CC mapper for effect parameters and `public/zoom-effect-mappings-msog.json` with names,
+  parameter names and ranges for 173 MS-50G effects.
 - [RyoSogawa/zoom-multistomp-commander](https://github.com/RyoSogawa/zoom-multistomp-commander):
   SysEx generator for MS Plus pedals; it started this project.
 - Reddit: [Chocolate and MS-50G](https://www.reddit.com/r/zoommultistomp/comments/1af8q6p/using_mvave_chocolate_to_change_between_effects/),

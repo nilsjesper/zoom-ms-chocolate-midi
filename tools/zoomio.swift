@@ -2,6 +2,10 @@
 //   swift tools/zoomio.swift backup <file>   save all 50 patches (changes patch, then restores it)
 //   swift tools/zoomio.swift read            current program, settings block (2B), current patch
 //   swift tools/zoomio.swift probe           send unknown single-byte SysEx commands, report replies
+//   swift tools/zoomio.swift send <hex...>   send one raw message as-is (no editor on/off), print the reply
+//   swift tools/zoomio.swift edits           test whether 51 reverts unsaved edits and whether a PC stores them
+//                                            (flips effect 1 of the current patch; restores it at the end)
+// Note: backup/read/probe end with editor-off (51), which also discards unsaved edits on the pedal.
 // See docs/PROTOCOL.md for what the messages mean.
 import CoreMIDI
 import Foundation
@@ -55,7 +59,7 @@ if dst == 0 { print("ZOOM MS Series not connected"); exit(1) }
 let id = xfer([0xF0, 0x7E, 0x00, 0x06, 0x01, 0xF7], 0.5)
 if let i = id.firstIndex(of: 0x52), i + 1 < id.count { Z[3] = id[i + 1] }
 print(String(format: "model %02X", Z[3]))
-if prog() < 0 { send(Z + [0x50, 0xF7]); wait(0.3); if prog() < 0 { print("pedal not responding"); exit(1) } }
+if mode != "send" && prog() < 0 { send(Z + [0x50, 0xF7]); wait(0.3); if prog() < 0 { print("pedal not responding"); exit(1) } }
 if mode == "backup" {
   send(Z + [0x50, 0xF7]); wait(0.3)
   let start = prog(); print("current program:", start)
@@ -89,4 +93,57 @@ if mode == "backup" {
   }
   print("end program:", prog())
   send(Z + [0x51, 0xF7]); wait(0.2)
+} else if mode == "send" {
+  let bytes = CommandLine.arguments.dropFirst(2).compactMap { UInt8($0, radix: 16) }
+  if bytes.isEmpty { print("usage: send <hex bytes>, e.g. send F0 52 00 58 29 F7 (61 on MIDISTOMP v1.2)"); exit(1) }
+  print("sent: ", hex(bytes))
+  let r = xfer(bytes, 0.8)
+  print("reply:", r.isEmpty ? "(none)" : hex(r))
+} else if mode == "edits" {
+  // T2/T3 in docs/TESTPLAN.md. Uses effect 1 of the current patch and a PC round trip
+  // (other patch, then back) instead of a power cycle to see what is in memory.
+  _ = take(); wait(2.0); let noise = take()
+  if !noise.isEmpty { print("warning: \(noise.count) unsolicited bytes in 2 s (another editor polling?):", hex(noise)); print("close sym.bios.is / other Zoom editors and retry"); exit(1) }
+  send(Z + [0x50, 0xF7]); wait(0.3)
+  if !findPC() { print("pedal ignores Program Change on every channel (PROG CH RECEIVE off?)"); exit(1) }
+  let start = prog(); let orig = patch()
+  guard start >= 0, orig.count == 146 else { print("could not read program/patch:", start, orig.count); exit(1) }
+  let want = Int(orig[6] & 1); let flipped = 1 - want
+  print("program \(start) (pedal patch \(start + 1)), effect 1 is \(want == 1 ? "on" : "off"); original patch saved in memory for restore")
+  func bit() -> Int { let p = patch(); return p.count == 146 ? Int(p[6] & 1) : -1 }
+  func flip(_ to: Int) { send(Z + [0x31, 0x00, 0x00, UInt8(to), 0x00, 0xF7]); wait(0.5) }
+  func roundTrip() { pc((start + 1) % 50); wait(0.2); pc(start); wait(0.2) }
+
+  flip(flipped); let b1 = bit(); print("after 31 flip: bit =", b1, b1 == flipped ? "(flipped)" : "(NOT flipped; aborting)"); if b1 != flipped { exit(1) }
+  send(Z + [0x51, 0xF7]); wait(0.5); send(Z + [0x50, 0xF7]); wait(0.3)
+  let t3 = bit()
+  print("T3 after 51 then 50: bit =", t3, t3 == want ? "=> 51 REVERTS unsaved edits" : t3 == flipped ? "=> 51 does NOT revert" : "(read failed)")
+
+  if t3 != flipped { flip(flipped); print("re-flipped for T2: bit =", bit()) }
+  pc(start); wait(0.2)
+  let t2a = bit(); wait(2.0); let t2b = bit()
+  print("after PC to same patch: bit =", t2a, "at 0.6 s,", t2b, "at ~3.5 s")
+  roundTrip()
+  let t2 = bit()
+  print("T2 after PC away and back: bit =", t2, t2 == flipped ? "=> PC STORES unsaved edits" : t2 == want ? "=> PC does NOT store (memory unchanged)" : "(read failed)")
+
+  // T3b: with a clean revert before the PC, nothing should be stored. Needs memory back at `want` first.
+  if t3 == want {
+    if bit() != want { flip(want); pc(start); wait(0.2); roundTrip() }
+    let pre = bit(); print("T3b precondition: memory bit =", pre, pre == want ? "(ok)" : "(could not reset; skipping T3b)")
+    if pre == want {
+      flip(flipped); print("  flipped: bit =", bit())
+      send(Z + [0x51, 0xF7]); wait(0.5); pc(start); wait(0.2); send(Z + [0x50, 0xF7]); wait(0.3); roundTrip()
+      let t3b = bit(); print("T3b flip, 51, PC, round trip: bit =", t3b, t3b == want ? "=> revert-before-PC keeps the patch clean" : "=> STORED despite 51")
+    }
+  }
+
+  // Restore: put the original bit back and store it the same way, then verify all 146 bytes.
+  if bit() != want { flip(want); pc(start); wait(0.2); roundTrip() }
+  var fin = patch()
+  if fin != orig { print("restore via 31+PC left differences; writing original patch with 28"); send(orig); wait(0.8); pc(start); wait(0.2); roundTrip(); fin = patch() }
+  print(fin == orig ? "restored: patch identical to original" : "RESTORE FAILED: patch differs (\(zip(fin, orig).filter { $0 != $1 }.count) bytes); restore it from your backup")
+  print("end program:", prog())
+} else {
+  print("usage: zoomio backup <file> | read | probe | send <hex bytes> | edits"); exit(1)
 }
