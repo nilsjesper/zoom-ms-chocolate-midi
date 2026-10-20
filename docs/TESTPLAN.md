@@ -39,8 +39,17 @@ Needs: pedal on the Mac over USB.
 Expected from `ZOOM MS Series`: `F0 52 00 58 31 ss 00 vv 00 F7` for the stomp (`vv` 01/00) and
 `F0 52 00 58 31 ss pp lo hi F7` per knob step (`pp` ≥ 2).
 
-Result: _not run yet_. If confirmed, change the "Edit report" row in PROTOCOL.md from **[zx]** to
-verified. If nothing arrives, the README's router note should drop the "pedal reports edits" claim.
+**Done 2026-10-20** on MIDISTOMP v1.2 (model `61`), patch 26, editor mode on, AUTO SAVE on:
+
+```
+17.23s ZOOM MS Series F0 52 00 61 31 00 00 00 00 F7          stomp: effect 1 off
+21.65s ZOOM MS Series F0 52 00 61 31 00 04 39 00 F7          knob, then one line per step
+  ...  (17 steps, value 39 -> 49)
+27.80s ZOOM MS Series F0 52 00 61 32 01 00 00 19 00 00 00 00 00 F7   AUTO SAVE stored patch 26
+```
+
+The "Edit report" row in PROTOCOL.md is now verified. New: AUTO SAVE stores about 5 s after the
+last edit and announces it with `32`. Patch 26 was written back from a copy taken just before.
 
 ## T4: the Chocolate sends list entries in list order
 

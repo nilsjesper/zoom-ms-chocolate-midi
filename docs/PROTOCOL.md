@@ -28,7 +28,8 @@ All SysEx below starts with `F0 52 00 58` (Zoom manufacturer id `52`, device `00
 | Editor mode off | `F0 52 00 58 51 F7` | Without it the pedal stays unlocked until power-cycled. Also **reverts the edit buffer**, discarding unsaved edits (verified: effect toggled by `31`, then `51`, reads back as stored). |
 | Effect on/off | `F0 52 00 58 31 ss 00 vv 00 F7` | `ss` = slot 0–2, `vv` = 01 on / 00 off. **Effects 4–6 are ignored.** |
 | Parameter edit | `F0 52 00 58 31 ss pp lo hi F7` | `pp` = 2… for knobs (from the g200kg doc; effects 1–3 only). |
-| Edit report (pedal → host) | `F0 52 00 58 31 ss pp lo hi F7` | **[zx]** Sent by the pedal, in editor mode, for every edit made on the pedal: `pp` = 0 is on/off, 2… knobs. |
+| Edit report (pedal → host) | `F0 52 00 58 31 ss pp lo hi F7` | Sent by the pedal, in editor mode, for every edit made on the pedal: `pp` = 0 is on/off, 2… knobs (verified on MIDISTOMP v1.2: a stomp sent `31 00 00 00 00`, a knob sent `31 00 04 vv 00` per step). |
+| Auto-save report (pedal → host) | `F0 52 00 58 32 01 00 00 pp 00 00 00 00 00 F7` | With AUTO SAVE on, about 5 s after the last edit made on the pedal, it stores the patch and sends this (the same bytes as Store patch). Seen on MIDISTOMP v1.2 in editor mode. |
 | Current program | `F0 52 00 58 33 F7` | Reply: `B0 00 00 B0 20 00 C0 pp`. **[zx]** The pedal never sends a PC on its own when the user changes patch; zoom-explorer polls this every 500 ms. |
 | Read patch | `F0 52 00 58 29 F7` | Reply: 146-byte patch starting `F0 52 00 58 28`. **[zx]** Right after an effect is added or deleted on the pedal the effect-count field can be stale; read again. |
 | Read stored patch | `F0 52 00 58 09 00 00 pp F7` | **[zx]** Reply `F0 52 00 58 08 00 00 pp <len lo> <len hi> <patch>`; byte 7 echoes `pp`. Reads a slot without changing program (`backup` currently uses PC + `29`). |
