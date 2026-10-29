@@ -1,0 +1,121 @@
+# Example layout for MIDISTOMP, groups 1-4. See layout.toml for the list of actions and keys.
+# Build: python3 make_fcp.py -l example-layout.toml -o example.fcp
+#
+# MIDISTOMP only: effects 4-6, knobs and patch up/down don't exist on stock firmware.
+# Groups 5-8 are left empty, so their switches keep CubeSuite's default (PC 0, which loads
+# patch 1, or does nothing with PROG CH START NO. 1).
+#
+# cc_toggle sends 127 on the first press after import, then 0, then 127 again: the control's
+# maximum, then its minimum. Toggles don't know the pedal's state, so after a patch change a
+# press can do the opposite of what you expect; press it again.
+
+# --- Group 1: effects 1-4 on/off (CC 14, 24, 34, 44) ------------------------------------
+
+[[switch]]
+group = 1
+switch = "A"
+action = "effect_toggle"
+effect = 1
+
+[[switch]]
+group = 1
+switch = "B"
+action = "effect_toggle"
+effect = 2
+
+[[switch]]
+group = 1
+switch = "C"
+action = "effect_toggle"
+effect = 3
+
+[[switch]]
+group = 1
+switch = "D"
+action = "effect_toggle"
+effect = 4
+
+# --- Group 2: next / previous patch (v1.1+), effects 5-6 on/off ---------------------------
+
+[[switch]]
+group = 2
+switch = "A"
+action = "patch_step"
+step = 1                  # next patch (CC 81)
+
+[[switch]]
+group = 2
+switch = "B"
+action = "effect_toggle"
+effect = 5
+
+[[switch]]
+group = 2
+switch = "C"
+action = "effect_toggle"
+effect = 6
+
+[[switch]]
+group = 2
+switch = "D"
+action = "patch_step"
+step = -1                 # previous patch (CC 80)
+
+# --- Group 3: patch jumps and the tuner -----------------------------------------------
+# patch is the number shown on the pedal; build with --pc-start to match PROG CH START NO.
+
+[[switch]]
+group = 3
+switch = "A"
+action = "program"
+patch = 1
+
+[[switch]]
+group = 3
+switch = "B"
+action = "program"
+patch = 10
+
+[[switch]]
+group = 3
+switch = "C"
+action = "program"
+patch = 50
+
+[[switch]]
+group = 3
+switch = "D"
+action = "cc_toggle"
+cc = 74
+label = "tuner on/off"
+
+# --- Group 4: knobs, max / min ----------------------------------------------------------
+# Effect n, knob k is CC 10n+4+k (15-73). A knob the effect doesn't have does nothing.
+
+[[switch]]
+group = 4
+switch = "A"
+action = "cc_toggle"
+cc = 15
+label = "effect 1 knob 1 max/min"
+
+[[switch]]
+group = 4
+switch = "B"
+action = "cc_toggle"
+cc = 16
+label = "effect 1 knob 2 max/min"
+
+[[switch]]
+group = 4
+switch = "C"
+action = "cc_toggle"
+cc = 25
+label = "effect 2 knob 1 max/min"
+
+[[switch]]
+group = 4
+switch = "D"
+action = "cc_toggle"
+cc = 73
+label = "effect 6 knob 9 max/min"

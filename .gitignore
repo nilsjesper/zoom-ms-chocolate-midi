@@ -1,5 +1,6 @@
 # Local research files, patch backups, generated output
 local/
+my-layout.toml
 *.fcp
 !fcp/template.fcp
 *-backup-*.txt
