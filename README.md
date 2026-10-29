@@ -1,6 +1,21 @@
 # zoom-ms-chocolate-midi
 
-Control an original Zoom MS-50G MultiStomp from an M-VAVE Chocolate Plus footswitch, with no
+## Background 
+
+I'd wanted to see if I could use Claude Code to write sysex-based preset files for my M-Vave Chococlate Plus in order to control a MultiStomp MS-50 to speed up experimentation. I got that working including
+
+* A script to write new CubeSuite compatible import setings based on a toml text file so I could try different things faster.
+* Some docs about existing sysex settings
+* A Swift based tool for maniuplating the pedal and reading results.
+
+Half way through this, the [MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp) project came along which meant no more futzing around with sysex and we could now address ALL of the buttons.
+
+I hope some of this might be helpful for other tinkerers!
+
+-Martin
+
+## Overview
+My Goal: Control an original Zoom MS-50G MultiStomp from an M-VAVE Chocolate Plus footswitch, with no
 computer in between. `make_fcp.py` writes a CubeSuite preset (`.fcp`) that toggles effects and the
 tuner and jumps to patches.
 
