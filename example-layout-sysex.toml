@@ -1,0 +1,94 @@
+# Example layout for Zoom's stock 3.10 firmware, groups 1-3. See layout.toml for the list of
+# actions and keys.
+# Build: python3 make_fcp.py --firmware stock -l example-layout-sysex.toml -o example-sysex.fcp
+#
+# Stock firmware: effects 1-3 on/off by SysEx, the tuner by CC 74 and patch jumps by Program
+# Change. Effects 4-6, knobs and patch up/down need MIDISTOMP; see example-layout-midistomp.toml.
+# Groups 4-8 are left empty, so their switches keep CubeSuite's default (PC 0, which loads
+# patch 1).
+#
+# Each effect switch sends editor mode on (F0 52 00 58 50 F7) before the on/off message, since
+# stock firmware ignores SysEx effect on/off until it gets editor mode. The first press after
+# import turns the effect off. Toggles don't know the pedal's state, so after a patch change a
+# press can do the opposite of what you expect; press it again. A patch jump stores any effect
+# you toggled into the patch being left (see Notes in the README).
+
+# --- Group 1: effects 1-3 on/off (SysEx) and the tuner (CC 74) --------------------------
+
+[[switch]]
+group = 1
+switch = "A"
+action = "effect_toggle"
+effect = 1
+
+[[switch]]
+group = 1
+switch = "B"
+action = "effect_toggle"
+effect = 2
+
+[[switch]]
+group = 1
+switch = "C"
+action = "effect_toggle"
+effect = 3
+
+[[switch]]
+group = 1
+switch = "D"
+action = "cc_toggle"
+cc = 74
+label = "tuner on/off"
+
+# --- Group 2: patches 1-4, in place of next / previous patch ----------------------------
+# patch is the number shown on the pedal, sent as PC patch - 1.
+
+[[switch]]
+group = 2
+switch = "A"
+action = "program"
+patch = 1
+
+[[switch]]
+group = 2
+switch = "B"
+action = "program"
+patch = 2
+
+[[switch]]
+group = 2
+switch = "C"
+action = "program"
+patch = 3
+
+[[switch]]
+group = 2
+switch = "D"
+action = "program"
+patch = 4
+
+# --- Group 3: more patch jumps ----------------------------------------------------------
+
+[[switch]]
+group = 3
+switch = "A"
+action = "program"
+patch = 10
+
+[[switch]]
+group = 3
+switch = "B"
+action = "program"
+patch = 20
+
+[[switch]]
+group = 3
+switch = "C"
+action = "program"
+patch = 30
+
+[[switch]]
+group = 3
+switch = "D"
+action = "program"
+patch = 50

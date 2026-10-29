@@ -108,9 +108,14 @@ action = "patch_step"     # previous patch (MIDISTOMP v1.1+); step = 1 for next
 step = -1
 ```
 
-[`example-layout.toml`](example-layout.toml) fills groups 1-4 with MIDISTOMP examples: effects
-1-6, knobs, patch jumps and up/down, and the tuner. Build it with
-`python3 make_fcp.py -l example-layout.toml -o example.fcp`.
+Two example layouts show what each firmware can do:
+
+- [`example-layout-midistomp.toml`](example-layout-midistomp.toml) fills groups 1-4: effects 1-6,
+  knobs, patch jumps and up/down, and the tuner. Build it with
+  `python3 make_fcp.py -l example-layout-midistomp.toml -o example-midistomp.fcp`.
+- [`example-layout-sysex.toml`](example-layout-sysex.toml) is for stock firmware and fills groups
+  1-3: effects 1-3 (by SysEx), the tuner and patch jumps. Build it with
+  `python3 make_fcp.py --firmware stock -l example-layout-sysex.toml -o example-sysex.fcp`.
 
 An entry with `firmware = "midistomp"` (or `"stock"`) is only used when building for that
 firmware; the default group 2 is MIDISTOMP-only this way.

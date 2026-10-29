@@ -1,7 +1,8 @@
 # Example layout for MIDISTOMP, groups 1-4. See layout.toml for the list of actions and keys.
-# Build: python3 make_fcp.py -l example-layout.toml -o example.fcp
+# Build: python3 make_fcp.py -l example-layout-midistomp.toml -o example-midistomp.fcp
 #
-# MIDISTOMP only: effects 4-6, knobs and patch up/down don't exist on stock firmware.
+# MIDISTOMP only: effects 4-6, knobs and patch up/down don't exist on stock firmware; see
+# example-layout-sysex.toml for what stock firmware can do.
 # Groups 5-8 are left empty, so their switches keep CubeSuite's default (PC 0, which loads
 # patch 1, or does nothing with PROG CH START NO. 1).
 #
