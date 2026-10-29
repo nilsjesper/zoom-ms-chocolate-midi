@@ -1,23 +1,28 @@
 # zoom-ms-chocolate-midi
 
-## Background 
+## Background
 
-I'd wanted to see if I could use Claude Code to write sysex-based preset files for my M-Vave Chococlate Plus in order to control a MultiStomp MS-50 to speed up experimentation. I got that working including
+I'd wanted to see if I could use Claude Code to write SysEx-based preset files for my M-VAVE
+Chocolate Plus to control my Zoom MS-50G MultiStomp. I got that working, including:
 
-* A script to write new CubeSuite compatible import setings based on a toml text file so I could try different things faster.
-* Some docs about existing sysex settings
-* A Swift based tool for maniuplating the pedal and reading results.
+- `make_fcp.py`, which writes a CubeSuite preset (`.fcp`) from a TOML layout file, so I could try
+  different things faster.
+- Notes on the pedal's SysEx and MIDI messages in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+- Swift tools for manipulating the pedal and reading the results (see [Tools](#tools-macos)).
 
-Half way through this, the [MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp) project came along which meant no more futzing around with sysex and we could now address ALL of the buttons.
+Halfway through this, the [MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp) firmware
+came along, which meant no more futzing around with SysEx, and we could now reach ALL six effects
+and their knobs over MIDI CC.
 
 I hope some of this might be helpful for other tinkerers!
 
 -Martin
 
 ## Overview
-My Goal: Control an original Zoom MS-50G MultiStomp from an M-VAVE Chocolate Plus footswitch, with no
-computer in between. `make_fcp.py` writes a CubeSuite preset (`.fcp`) that toggles effects and the
-tuner and jumps to patches.
+
+My goal: control an original Zoom MS-50G MultiStomp from an M-VAVE Chocolate Plus footswitch, with
+no computer in between. `make_fcp.py` writes a CubeSuite preset (`.fcp`) that toggles effects and
+the tuner and jumps to patches.
 
 It works with Zoom's stock 3.10 firmware. With [MIDISTOMP](https://github.com/matujuice/zoom-ms-midistomp)
 firmware it can also switch effects 4-6 and move knobs over MIDI CC.
